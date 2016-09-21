@@ -1,3 +1,16 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.property;
 
 import java.lang.reflect.Field;
@@ -8,10 +21,13 @@ import java.util.List;
 import org.activiti.bpmn.model.ComplexDataType;
 import org.activiti.bpmn.model.CustomProperty;
 import org.activiti.bpmn.model.ServiceTask;
+import org.activiti.designer.eclipse.common.ActivitiPlugin;
+import org.activiti.designer.integration.annotation.Help;
+import org.activiti.designer.integration.annotation.Locale;
+import org.activiti.designer.integration.annotation.Locales;
+import org.activiti.designer.integration.annotation.Property;
 import org.activiti.designer.integration.servicetask.CustomServiceTask;
 import org.activiti.designer.integration.servicetask.DelegateType;
-import org.activiti.designer.integration.servicetask.annotation.Help;
-import org.activiti.designer.integration.servicetask.annotation.Property;
 import org.activiti.designer.property.extension.field.CustomPropertyBooleanChoiceField;
 import org.activiti.designer.property.extension.field.CustomPropertyComboboxChoiceField;
 import org.activiti.designer.property.extension.field.CustomPropertyDatePickerField;
@@ -24,11 +40,10 @@ import org.activiti.designer.property.extension.field.FieldInfo;
 import org.activiti.designer.util.eclipse.ActivitiUiUtil;
 import org.activiti.designer.util.extension.ExtensionUtil;
 import org.activiti.designer.util.extension.FormToolTip;
-import org.activiti.designer.util.property.ActivitiPropertySection;
+import org.activiti.designer.util.preferences.Preferences;
+import org.activiti.designer.util.preferences.PreferencesUtil;
 import org.apache.commons.lang.StringUtils;
-import org.eclipse.emf.transaction.TransactionalEditingDomain;
 import org.eclipse.graphiti.mm.pictograms.PictogramElement;
-import org.eclipse.graphiti.ui.editor.DiagramEditor;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.window.ToolTip;
 import org.eclipse.swt.SWT;
@@ -48,11 +63,10 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.ui.ISharedImages;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.PlatformUI;
-import org.eclipse.ui.views.properties.tabbed.ITabbedPropertyConstants;
 import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetPage;
 import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetWidgetFactory;
 
-public class PropertyCustomServiceTaskSection extends ActivitiPropertySection implements ITabbedPropertyConstants {
+public class PropertyCustomServiceTaskSection extends AbstractPropertyCustomTaskSection {
 
   public static Font boldFont;
   public static Font italicFont;
@@ -187,137 +201,158 @@ public class PropertyCustomServiceTaskSection extends ActivitiPropertySection im
 
           final Property property = fieldInfo.getPropertyAnnotation();
 
-          Control createdControl = null;
-          CustomPropertyField createdCustomPropertyField = null;
-
-          switch (property.type()) {
-
-          case TEXT:
-            createdCustomPropertyField = new CustomPropertyTextField(this, serviceTask, fieldInfo.getField());
-            createdControl = createdCustomPropertyField.render(workParent, factory, listener);
-            data = new FormData();
-            data.top = new FormAttachment(previousAnchor, VSPACE);
-            data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
-            data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
-            createdControl.setLayoutData(data);
-            break;
-
-          case MULTILINE_TEXT:
-            createdCustomPropertyField = new CustomPropertyMultilineTextField(this, serviceTask, fieldInfo.getField());
-            createdControl = createdCustomPropertyField.render(workParent, factory, listener);
-            data = new FormData();
-            data.top = new FormAttachment(previousAnchor, VSPACE);
-            data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
-            data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
-            data.height = 80;
-            createdControl.setLayoutData(data);
-            break;
-
-          case PERIOD:
-            createdCustomPropertyField = new CustomPropertyPeriodField(this, serviceTask, fieldInfo.getField());
-            createdControl = createdCustomPropertyField.render(workParent, factory, listener);
-            data = new FormData();
-            data.top = new FormAttachment(previousAnchor, VSPACE);
-            data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
-            data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
-            createdControl.setLayoutData(data);
-            break;
-
-          case BOOLEAN_CHOICE:
-            createdCustomPropertyField = new CustomPropertyBooleanChoiceField(this, serviceTask, fieldInfo.getField());
-            createdControl = createdCustomPropertyField.render(workParent, factory, listener);
-            data = new FormData();
-            data.top = new FormAttachment(previousAnchor, VSPACE);
-            data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
-            data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
-            createdControl.setLayoutData(data);
-            break;
-
-          case COMBOBOX_CHOICE:
-            createdCustomPropertyField = new CustomPropertyComboboxChoiceField(this, serviceTask, fieldInfo.getField());
-            createdControl = createdCustomPropertyField.render(workParent, factory, listener);
-            data = new FormData();
-            data.top = new FormAttachment(previousAnchor, VSPACE);
-            data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
-            data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
-            createdControl.setLayoutData(data);
-            break;
-
-          case RADIO_CHOICE:
-            createdCustomPropertyField = new CustomPropertyRadioChoiceField(this, serviceTask, fieldInfo.getField());
-            createdControl = createdCustomPropertyField.render(workParent, factory, listener);
-            data = new FormData();
-            data.top = new FormAttachment(previousAnchor, VSPACE);
-            data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
-            data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
-            createdControl.setLayoutData(data);
-            break;
-
-          case DATE_PICKER:
-            createdCustomPropertyField = new CustomPropertyDatePickerField(this, serviceTask, fieldInfo.getField());
-            createdControl = createdCustomPropertyField.render(workParent, factory, listener);
-            data = new FormData();
-            data.top = new FormAttachment(previousAnchor, VSPACE);
-            data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
-            data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
-            createdControl.setLayoutData(data);
-            break;
-
-          }
-
-          customPropertyFields.add(createdCustomPropertyField);
-
-          previousAnchor = createdControl;
-
-          // Create a label for the field
-          String displayName = property.displayName();
-          if (StringUtils.isBlank(property.displayName())) {
-            displayName = fieldInfo.getFieldName();
-          }
-
-          if (property.required()) {
-            displayName += PROPERTY_REQUIRED_DISPLAY;
-          }
-
-          displayName += ": ";
-
-          final CLabel propertyLabel = factory.createCLabel(workParent, displayName); //$NON-NLS-1$
-          data = new FormData();
-          data.top = new FormAttachment(createdControl, 0, SWT.TOP);
-          data.left = new FormAttachment(0, 0);
-          data.right = new FormAttachment(createdControl, -HSPACE);
-          propertyLabel.setLayoutData(data);
-
-          // Create a help button for the field
-          final Help help = fieldInfo.getHelpAnnotation();
-          if (help != null) {
-            final Button propertyHelp = factory.createButton(workParent, "", SWT.BUTTON1);
-            propertyHelp.setImage(PlatformUI.getWorkbench().getSharedImages().getImage(ISharedImages.IMG_LCL_LINKTO_HELP));
-
-            // create a tooltip
-            final ToolTip tooltip = new FormToolTip(propertyHelp, String.format("Help for field %s",
-                    property.displayName().equals("") ? fieldInfo.getFieldName() : property.displayName()), help.displayHelpShort(), help.displayHelpLong());
-            tooltip.setHideOnMouseDown(false);
-
+          if (property.visible()) {
+            Control createdControl = null;
+            CustomPropertyField createdCustomPropertyField = null;
+          
+            switch (property.type()) {
+  
+            case TEXT:
+              createdCustomPropertyField = new CustomPropertyTextField(this, serviceTask, fieldInfo.getField());
+              createdControl = createdCustomPropertyField.render(workParent, factory, listener);
+              data = new FormData();
+              data.top = new FormAttachment(previousAnchor, VSPACE);
+              data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
+              data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
+              createdControl.setLayoutData(data);
+              break;
+  
+            case MULTILINE_TEXT:
+              createdCustomPropertyField = new CustomPropertyMultilineTextField(this, serviceTask, fieldInfo.getField());
+              createdControl = createdCustomPropertyField.render(workParent, factory, listener);
+              data = new FormData();
+              data.top = new FormAttachment(previousAnchor, VSPACE);
+              data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
+              data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
+              data.height = 80;
+              createdControl.setLayoutData(data);
+              break;
+  
+            case PERIOD:
+              createdCustomPropertyField = new CustomPropertyPeriodField(this, serviceTask, fieldInfo.getField());
+              createdControl = createdCustomPropertyField.render(workParent, factory, listener);
+              data = new FormData();
+              data.top = new FormAttachment(previousAnchor, VSPACE);
+              data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
+              data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
+              createdControl.setLayoutData(data);
+              break;
+  
+            case BOOLEAN_CHOICE:
+              createdCustomPropertyField = new CustomPropertyBooleanChoiceField(this, serviceTask, fieldInfo.getField());
+              createdControl = createdCustomPropertyField.render(workParent, factory, listener);
+              data = new FormData();
+              data.top = new FormAttachment(previousAnchor, VSPACE);
+              data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
+              data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
+              createdControl.setLayoutData(data);
+              break;
+  
+            case COMBOBOX_CHOICE:
+              createdCustomPropertyField = new CustomPropertyComboboxChoiceField(this, serviceTask, fieldInfo.getField());
+              createdControl = createdCustomPropertyField.render(workParent, factory, listener);
+              data = new FormData();
+              data.top = new FormAttachment(previousAnchor, VSPACE);
+              data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
+              data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
+              createdControl.setLayoutData(data);
+              break;
+  
+            case RADIO_CHOICE:
+              createdCustomPropertyField = new CustomPropertyRadioChoiceField(this, serviceTask, fieldInfo.getField());
+              createdControl = createdCustomPropertyField.render(workParent, factory, listener);
+              data = new FormData();
+              data.top = new FormAttachment(previousAnchor, VSPACE);
+              data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
+              data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
+              createdControl.setLayoutData(data);
+              break;
+  
+            case DATE_PICKER:
+              createdCustomPropertyField = new CustomPropertyDatePickerField(this, serviceTask, fieldInfo.getField());
+              createdControl = createdCustomPropertyField.render(workParent, factory, listener);
+              data = new FormData();
+              data.top = new FormAttachment(previousAnchor, VSPACE);
+              data.left = new FormAttachment(0, LABEL_COLUMN_WIDTH);
+              data.right = new FormAttachment(100, -HELP_COLUMN_WIDTH);
+              createdControl.setLayoutData(data);
+              break;
+  
+            }
+  
+            customPropertyFields.add(createdCustomPropertyField);
+  
+            previousAnchor = createdControl;
+  
+            // Create a label for the field
+            String displayName = null;
+            String defaultLanguage = PreferencesUtil.getStringPreference(Preferences.ACTIVITI_DEFAULT_LANGUAGE, ActivitiPlugin.getDefault());
+            if (StringUtils.isNotEmpty(defaultLanguage)) {
+              final Locales locales = fieldInfo.getLocalesAnnotation();
+              if (locales != null && locales.value() != null && locales.value().length > 0) {
+                for (Locale locale : locales.value()) {
+                  if (defaultLanguage.equalsIgnoreCase(locale.locale())) {
+                    displayName = locale.labelName();
+                  }
+                }
+              }
+            }
+            
+            if (StringUtils.isEmpty(displayName)) {
+              displayName = property.displayName();
+              if (StringUtils.isEmpty(property.displayName())) {
+                displayName = fieldInfo.getFieldName();
+              }
+            }
+  
+            if (property.required()) {
+              displayName += PROPERTY_REQUIRED_DISPLAY;
+            }
+            
+            if (property.readOnly()) {
+          	  createdControl.setEnabled(false);
+            }
+  
+            displayName += ": ";
+  
+            final CLabel propertyLabel = factory.createCLabel(workParent, displayName); //$NON-NLS-1$
             data = new FormData();
             data.top = new FormAttachment(createdControl, 0, SWT.TOP);
-            data.left = new FormAttachment(createdControl, 0);
-            propertyHelp.setLayoutData(data);
-            propertyHelp.addMouseListener(new MouseListener() {
-
-              @Override
-              public void mouseUp(MouseEvent e) {
-              }
-
-              @Override
-              public void mouseDown(MouseEvent e) {
-                tooltip.show(new Point(0, 0));
-              }
-
-              @Override
-              public void mouseDoubleClick(MouseEvent e) {
-              }
-            });
+            data.left = new FormAttachment(0, 0);
+            data.right = new FormAttachment(createdControl, -HSPACE);
+            propertyLabel.setLayoutData(data);
+  
+            // Create a help button for the field
+            final Help help = fieldInfo.getHelpAnnotation();
+            if (help != null) {
+              final Button propertyHelp = factory.createButton(workParent, "", SWT.BUTTON1);
+              propertyHelp.setImage(PlatformUI.getWorkbench().getSharedImages().getImage(ISharedImages.IMG_LCL_LINKTO_HELP));
+  
+              // create a tooltip
+              final ToolTip tooltip = new FormToolTip(propertyHelp, String.format("Help for field %s",
+                      property.displayName().equals("") ? fieldInfo.getFieldName() : property.displayName()), help.displayHelpShort(), help.displayHelpLong());
+              tooltip.setHideOnMouseDown(false);
+  
+              data = new FormData();
+              data.top = new FormAttachment(createdControl, 0, SWT.TOP);
+              data.left = new FormAttachment(createdControl, 0);
+              propertyHelp.setLayoutData(data);
+              propertyHelp.addMouseListener(new MouseListener() {
+  
+                @Override
+                public void mouseUp(MouseEvent e) {
+                }
+  
+                @Override
+                public void mouseDown(MouseEvent e) {
+                  tooltip.show(new Point(0, 0));
+                }
+  
+                @Override
+                public void mouseDoubleClick(MouseEvent e) {
+                }
+              });
+            }
           }
         }
 
@@ -432,18 +467,6 @@ public class PropertyCustomServiceTaskSection extends ActivitiPropertySection im
       }
     };
     runModelChange(runnable);
-  }
-
-  public void runModelChange(final Runnable runnable) {
-    PictogramElement pe = getSelectedPictogramElement();
-    if (pe != null) {
-      Object bo = getBusinessObject(pe);
-      if (bo instanceof ServiceTask) {
-        DiagramEditor diagramEditor = (DiagramEditor) getDiagramEditor();
-        TransactionalEditingDomain editingDomain = diagramEditor.getEditingDomain();
-        ActivitiUiUtil.runModelChange(runnable, editingDomain, "Model Update");
-      }
-    }
   }
 
   private ServiceTask getServiceTask() {

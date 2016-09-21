@@ -1,3 +1,16 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.util.eclipse;
 
 import java.util.Collection;
@@ -9,13 +22,17 @@ import org.activiti.bpmn.model.Association;
 import org.activiti.bpmn.model.BaseElement;
 import org.activiti.bpmn.model.BoundaryEvent;
 import org.activiti.bpmn.model.FlowElement;
+import org.activiti.bpmn.model.FlowElementsContainer;
 import org.activiti.bpmn.model.Lane;
+import org.activiti.bpmn.model.MessageFlow;
 import org.activiti.bpmn.model.Pool;
 import org.activiti.bpmn.model.Process;
 import org.activiti.bpmn.model.SubProcess;
 import org.activiti.bpmn.model.TextAnnotation;
-import org.activiti.designer.util.editor.Bpmn2MemoryModel;
+import org.activiti.designer.util.editor.BpmnMemoryModel;
+import org.activiti.designer.util.editor.KickstartProcessMemoryModel;
 import org.activiti.designer.util.editor.ModelHandler;
+import org.activiti.workflow.simple.definition.StepDefinition;
 import org.apache.commons.lang.ArrayUtils;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IProjectDescription;
@@ -199,7 +216,7 @@ public class ActivitiUiUtil {
   }
 
   public static final String getNextId(final Class<? extends BaseElement> featureClass, final String featureIdKey, final Diagram diagram) {
-    Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(diagram));
+    BpmnMemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(diagram));
     int determinedId = 0;
     
     if (featureClass.equals(Pool.class)) {
@@ -211,7 +228,10 @@ public class ActivitiUiUtil {
         if (featureClass.equals(Lane.class)) {
           determinedId = loopThroughLanes(featureClass, determinedId, process.getLanes(), featureIdKey);
         } else if (featureClass.equals(TextAnnotation.class) || featureClass.equals(Association.class)) {
-          determinedId = loopThroughArtifacts(featureClass, determinedId, process.getArtifacts(), featureIdKey);
+          determinedId = loopThroughArtifacts(featureClass, determinedId, process, featureIdKey);
+          
+        } else if (featureClass.equals(MessageFlow.class)) {
+          determinedId = loopThroughMessageFlows(determinedId, model.getBpmnModel().getMessageFlows().values(), featureIdKey);
         } else {
           determinedId = loopThroughElements(featureClass, determinedId, process.getFlowElements(), featureIdKey);
         }
@@ -242,10 +262,27 @@ public class ActivitiUiUtil {
   }
   
   public static int loopThroughArtifacts(final Class<? extends BaseElement> featureClass, int determinedId, 
-      Collection<Artifact> artifactList, final String featureIdKey) {
+      FlowElementsContainer container, final String featureIdKey) {
     
-    for (Artifact artifact : artifactList) {
+    for (Artifact artifact : container.getArtifacts()) {
       String contentObjectId = artifact.getId().replace(featureIdKey, "");
+      determinedId = getId(contentObjectId, determinedId);
+    }
+    
+    for (FlowElement element : container.getFlowElements()) {
+      if (element instanceof SubProcess) {
+        determinedId = loopThroughArtifacts(featureClass, determinedId, (SubProcess) element, featureIdKey);
+      }
+    }
+    
+    return determinedId;
+  }
+  
+  public static int loopThroughMessageFlows(int determinedId, Collection<MessageFlow> messageFlowList, 
+      final String featureIdKey) {
+    
+    for (MessageFlow messageFlow : messageFlowList) {
+      String contentObjectId = messageFlow.getId().replace(featureIdKey, "");
       determinedId = getId(contentObjectId, determinedId);
     }
     return determinedId;
@@ -256,11 +293,11 @@ public class ActivitiUiUtil {
   	
   	for (FlowElement element : elementList) {
       
-      if(element instanceof SubProcess) {
+      if (element instanceof SubProcess) {
       	determinedId = loopThroughElements(featureClass, determinedId, ((SubProcess) element).getFlowElements(), featureIdKey);
       }
       
-      if(featureClass == BoundaryEvent.class && element instanceof Activity) {
+      if (featureClass == BoundaryEvent.class && element instanceof Activity) {
       	Activity activity = (Activity) element;
       	for (BoundaryEvent boundaryEvent : activity.getBoundaryEvents()) {
       	  if (boundaryEvent.getId() != null) {
@@ -281,14 +318,14 @@ public class ActivitiUiUtil {
   private static int getId(String contentObjectId, int determinedId) {
     int newdId = determinedId;
     boolean isNumber = true;
-    if(contentObjectId != null && contentObjectId.length() > 0) {
+    if (contentObjectId != null && contentObjectId.length() > 0) {
       
-      for(int i = 0; i < contentObjectId.length(); i++) {
-        if(Character.isDigit(contentObjectId.charAt(i)) == false) {
+      for (int i = 0; i < contentObjectId.length(); i++) {
+        if (Character.isDigit(contentObjectId.charAt(i)) == false) {
           isNumber = false;
         }
       }
-      if(isNumber == true) {
+      if (isNumber == true) {
         Integer intNumber = Integer.valueOf(contentObjectId);
         if (intNumber > newdId) {
           newdId = intNumber;
@@ -296,6 +333,20 @@ public class ActivitiUiUtil {
       }
     }
     return newdId;
+  }
+  
+  public static final String getNextStepId(final Class<? extends StepDefinition> featureClass, final String featureIdKey, final Diagram diagram) {
+    KickstartProcessMemoryModel model = ModelHandler.getKickstartProcessModel(EcoreUtil.getURI(diagram));
+    int determinedId = 0;
+    
+    for (StepDefinition step : model.getWorkflowDefinition().getSteps()) {
+      if (step.getClass() == featureClass) {
+        String contentObjectId = step.getId().replace(featureIdKey, "");
+        determinedId = getId(contentObjectId, determinedId);
+      }
+    }
+    determinedId++;
+    return String.format(ID_PATTERN, featureIdKey, determinedId);
   }
 
 }

@@ -1,109 +1,53 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.property;
 
 import org.activiti.bpmn.model.ErrorEventDefinition;
-import org.activiti.bpmn.model.StartEvent;
-import org.activiti.designer.util.eclipse.ActivitiUiUtil;
-import org.activiti.designer.util.property.ActivitiPropertySection;
-import org.eclipse.emf.transaction.TransactionalEditingDomain;
-import org.eclipse.graphiti.mm.pictograms.PictogramElement;
-import org.eclipse.graphiti.ui.editor.DiagramEditor;
-import org.eclipse.swt.SWT;
-import org.eclipse.swt.custom.CLabel;
-import org.eclipse.swt.events.FocusEvent;
-import org.eclipse.swt.events.FocusListener;
-import org.eclipse.swt.layout.FormAttachment;
-import org.eclipse.swt.layout.FormData;
-import org.eclipse.swt.widgets.Composite;
+import org.activiti.bpmn.model.Event;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.views.properties.tabbed.ITabbedPropertyConstants;
 import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetPage;
-import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetWidgetFactory;
 
 public class PropertyErrorStartEventSection extends ActivitiPropertySection implements ITabbedPropertyConstants {
 
 	private Text errorCodeText;
 
 	@Override
-	public void createControls(Composite parent, TabbedPropertySheetPage tabbedPropertySheetPage) {
-		super.createControls(parent, tabbedPropertySheetPage);
+  public void createFormControls(TabbedPropertySheetPage aTabbedPropertySheetPage) {
+    errorCodeText = createTextControl(false);
+    createLabel("Error code", errorCodeText);
+  }
 
-		TabbedPropertySheetWidgetFactory factory = getWidgetFactory();
-		Composite composite = factory.createFlatFormComposite(parent);
-		FormData data;
-		
-		errorCodeText = factory.createText(composite, ""); //$NON-NLS-1$
-		data = new FormData();
-		data.left = new FormAttachment(0, 120);
-		data.right = new FormAttachment(100, 0);
-		data.top = new FormAttachment(0, VSPACE);
-		errorCodeText.setLayoutData(data);
-		errorCodeText.addFocusListener(listener);
+  @Override
+  protected Object getModelValueForControl(Control control, Object businessObject) {
+    Event event = (Event) businessObject;
+    if (control == errorCodeText) {
+      if (event.getEventDefinitions().get(0) != null) {
+        ErrorEventDefinition errorDefinition = (ErrorEventDefinition) event.getEventDefinitions().get(0);
+        return errorDefinition.getErrorCode();
+      }
+    }
+    return null;
+  }
 
-		createLabel(composite, "Error code", errorCodeText, factory); //$NON-NLS-1$
-	}
-
-	@Override
-	public void refresh() {
-	  errorCodeText.removeFocusListener(listener);
-
-		PictogramElement pe = getSelectedPictogramElement();
-		if (pe != null) {
-			Object bo = getBusinessObject(pe);
-			if (bo == null)
-				return;
-			
-			String errorCode = null;
-			if(bo instanceof StartEvent) {
-				StartEvent startEvent = (StartEvent) bo;
-			  if(startEvent.getEventDefinitions().get(0) != null) {
-          ErrorEventDefinition errorDefinition = (ErrorEventDefinition) startEvent.getEventDefinitions().get(0);
-          if(errorDefinition.getErrorCode() != null) {
-            errorCode = errorDefinition.getErrorCode();
-          }
-        }
-			}
-			errorCodeText.setText(errorCode == null ? "" : errorCode);
-		}
-		errorCodeText.addFocusListener(listener);
-	}
-
-	private FocusListener listener = new FocusListener() {
-
-		public void focusGained(final FocusEvent e) {
-		}
-
-		public void focusLost(final FocusEvent e) {
-			PictogramElement pe = getSelectedPictogramElement();
-			if (pe != null) {
-				final Object bo = getBusinessObject(pe);
-				if (bo instanceof StartEvent) {
-					DiagramEditor diagramEditor = (DiagramEditor) getDiagramEditor();
-					TransactionalEditingDomain editingDomain = diagramEditor.getEditingDomain();
-					ActivitiUiUtil.runModelChange(new Runnable() {
-						public void run() {
-							
-							String errorCode = errorCodeText.getText();
-							if(bo instanceof StartEvent) {
-								StartEvent startEvent = (StartEvent) bo;
-							  ErrorEventDefinition errorDefinition = (ErrorEventDefinition) startEvent.getEventDefinitions().get(0);
-                errorDefinition.setErrorCode(errorCode);
-							}
-						}
-					}, editingDomain, "Model Update");
-				}
-
-			}
-		}
-	};
-	
-	private CLabel createLabel(Composite parent, String text, Control control, TabbedPropertySheetWidgetFactory factory) {
-    CLabel label = factory.createCLabel(parent, text); //$NON-NLS-1$
-    FormData data = new FormData();
-    data.left = new FormAttachment(0, 0);
-    data.right = new FormAttachment(control, -HSPACE);
-    data.top = new FormAttachment(control, 0, SWT.TOP);
-    label.setLayoutData(data);
-    return label;
+  @Override
+  protected void storeValueInModel(Control control, Object businessObject) {
+    Event event = (Event) businessObject;
+    if (control == errorCodeText) {
+      ErrorEventDefinition errorDefinition = (ErrorEventDefinition) event.getEventDefinitions().get(0);
+      errorDefinition.setErrorCode(errorCodeText.getText());
+    }
   }
 }

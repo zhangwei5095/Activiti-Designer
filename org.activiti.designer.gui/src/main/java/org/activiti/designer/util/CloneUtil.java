@@ -1,4 +1,17 @@
 /**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
  * 
  */
 package org.activiti.designer.util;
@@ -17,6 +30,7 @@ import org.activiti.bpmn.model.EndEvent;
 import org.activiti.bpmn.model.ExclusiveGateway;
 import org.activiti.bpmn.model.FieldExtension;
 import org.activiti.bpmn.model.FlowElement;
+import org.activiti.bpmn.model.FlowNode;
 import org.activiti.bpmn.model.FormProperty;
 import org.activiti.bpmn.model.FormValue;
 import org.activiti.bpmn.model.InclusiveGateway;
@@ -98,9 +112,12 @@ public final class CloneUtil {
       ((Activity) cloneElement).setExecutionListeners(resultListenerList);
     }
 
-    if (element instanceof Activity) {
-      ((Activity) cloneElement).setAsynchronous(((Activity) element).isAsynchronous());
-      ((Activity) cloneElement).setDefaultFlow(((Activity) element).getDefaultFlow());
+    if (element instanceof FlowNode) {
+      ((FlowNode) cloneElement).setAsynchronous(((FlowNode) element).isAsynchronous());
+      ((FlowNode) cloneElement).setNotExclusive(((FlowNode) element).isNotExclusive());
+      if (element instanceof Activity) {
+        ((Activity) cloneElement).setDefaultFlow(((Activity) element).getDefaultFlow());
+      }
     }
 
     if (formProperties != null) {

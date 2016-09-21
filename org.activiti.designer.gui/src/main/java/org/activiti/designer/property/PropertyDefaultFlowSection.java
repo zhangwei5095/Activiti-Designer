@@ -1,137 +1,78 @@
-/*******************************************************************************
- * <copyright>
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Copyright (c) 2005, 2010 SAP AG.
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Contributors:
- *    SAP AG - initial API, implementation and documentation
- *
- * </copyright>
- *
- *******************************************************************************/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.property;
 
 import java.util.List;
 
 import org.activiti.bpmn.model.Activity;
+import org.activiti.bpmn.model.FlowNode;
 import org.activiti.bpmn.model.Gateway;
 import org.activiti.bpmn.model.SequenceFlow;
-import org.activiti.designer.util.eclipse.ActivitiUiUtil;
-import org.activiti.designer.util.property.ActivitiPropertySection;
-import org.eclipse.emf.transaction.TransactionalEditingDomain;
 import org.eclipse.graphiti.mm.pictograms.PictogramElement;
-import org.eclipse.graphiti.ui.editor.DiagramEditor;
-import org.eclipse.swt.SWT;
-import org.eclipse.swt.custom.CCombo;
-import org.eclipse.swt.custom.CLabel;
-import org.eclipse.swt.events.FocusEvent;
-import org.eclipse.swt.events.FocusListener;
-import org.eclipse.swt.layout.FormAttachment;
-import org.eclipse.swt.layout.FormData;
-import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Combo;
+import org.eclipse.swt.widgets.Control;
 import org.eclipse.ui.views.properties.tabbed.ITabbedPropertyConstants;
 import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetPage;
-import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetWidgetFactory;
 
 public class PropertyDefaultFlowSection extends ActivitiPropertySection implements ITabbedPropertyConstants {
 
-  private Composite composite;
-  private CCombo defaultCombo;
-  private CLabel defaultLabel;
-
-  @Override
-  public void createControls(Composite parent, TabbedPropertySheetPage tabbedPropertySheetPage) {
-    super.createControls(parent, tabbedPropertySheetPage);
-
-    TabbedPropertySheetWidgetFactory factory = getWidgetFactory();
-    composite = factory.createFlatFormComposite(parent);
-    FormData data;
-
-    defaultCombo = getWidgetFactory().createCCombo(composite, SWT.NONE);
-    data = new FormData();
-    data.left = new FormAttachment(0, 120);
-    data.right = new FormAttachment(100, 0);
-    data.top = new FormAttachment(0, VSPACE);
-    defaultCombo.setLayoutData(data);
-    defaultCombo.addFocusListener(listener);
-
-    defaultLabel = getWidgetFactory().createCLabel(composite, "Default flow:"); //$NON-NLS-1$
-    data = new FormData();
-    data.left = new FormAttachment(0, 0);
-    data.right = new FormAttachment(defaultCombo, -HSPACE);
-    data.top = new FormAttachment(defaultCombo, 0, SWT.CENTER);
-    defaultLabel.setLayoutData(data);
-  }
+  private Combo defaultCombo;
   
   @Override
+  public void createFormControls(TabbedPropertySheetPage aTabbedPropertySheetPage) {
+    defaultCombo = createCombobox(new String[]{}, 0);
+    createLabel("Default flow", defaultCombo);
+  }
+  
+  
+
+  @Override
   public void refresh() {
-    defaultCombo.removeFocusListener(listener);
-
-    PictogramElement pe = getSelectedPictogramElement();
-
-    if (pe != null) {
-      Object bo = getBusinessObject(pe);
-      // the filter assured, that it is a EClass
-      if (bo == null)
-        return;
-
-      List<SequenceFlow> flowList = null;
-      if(bo instanceof Activity) {
-        flowList = ((Activity) bo).getOutgoingFlows();
-      } else if(bo instanceof Gateway) {
-        flowList = ((Gateway) bo).getOutgoingFlows();
-      }
-      
-      defaultCombo.removeAll();
-        	
-      for (SequenceFlow flow : flowList) {
-        defaultCombo.add(flow.getId());
-      }
-      
-      String defaultFlow = null;
-      if(bo instanceof Activity) {
-        defaultFlow = ((Activity) bo).getDefaultFlow();
-      } else if(bo instanceof Gateway) {
-        defaultFlow = ((Gateway) bo).getDefaultFlow();
-      }
-      
-      if(defaultFlow != null) {
-        defaultCombo.select(defaultCombo.indexOf(defaultFlow));
-      }
-      
-      defaultCombo.addFocusListener(listener);
+    PictogramElement element = getSelectedPictogramElement();
+    FlowNode flowNode = (FlowNode) getBusinessObject(element);
+    List<SequenceFlow> flowList = flowNode.getOutgoingFlows();
+    defaultCombo.removeAll();
+    defaultCombo.add("");
+    for (SequenceFlow flow : flowList) {
+      defaultCombo.add(flow.getId());
     }
+    
+    super.refresh();
   }
 
-  private FocusListener listener = new FocusListener() {
-
-    public void focusGained(final FocusEvent e) {
+  @Override
+  protected Object getModelValueForControl(Control control, Object businessObject) {
+    if (control == defaultCombo) {
+      String defaultFlow = null;
+      if (businessObject instanceof Activity) {
+        defaultFlow = ((Activity) businessObject).getDefaultFlow();
+      } else if (businessObject instanceof Gateway) {
+        defaultFlow = ((Gateway) businessObject).getDefaultFlow();
+      }
+      return defaultFlow; 
     }
+    return null;
+  }
 
-    public void focusLost(final FocusEvent e) {
-      final PictogramElement pe = getSelectedPictogramElement();
-      if (pe == null)
-        return;
-      final Object bo = getBusinessObject(pe);
-
-      DiagramEditor diagramEditor = (DiagramEditor) getDiagramEditor();
-      TransactionalEditingDomain editingDomain = diagramEditor.getEditingDomain();
-      ActivitiUiUtil.runModelChange(new Runnable() {
-
-        public void run() {
-          String defaultValue = defaultCombo.getText();
-          if(bo instanceof Activity) {
-            ((Activity) bo).setDefaultFlow(defaultValue);
-          } else if(bo instanceof Gateway) {
-            ((Gateway) bo).setDefaultFlow(defaultValue);
-          }
-        }
-      }, editingDomain, "Model Update");
+  @Override
+  protected void storeValueInModel(Control control, Object businessObject) {
+    if (control == defaultCombo) {
+      if (businessObject instanceof Activity) {
+        ((Activity) businessObject).setDefaultFlow(defaultCombo.getText());
+      } else if (businessObject instanceof Gateway) {
+        ((Gateway) businessObject).setDefaultFlow(defaultCombo.getText());
+      }
     }
-  };
-
+  }
 }

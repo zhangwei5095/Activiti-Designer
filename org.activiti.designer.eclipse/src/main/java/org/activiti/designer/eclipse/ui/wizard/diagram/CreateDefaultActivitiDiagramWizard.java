@@ -1,13 +1,28 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.eclipse.ui.wizard.diagram;
 
 import java.lang.reflect.InvocationTargetException;
 
 import org.activiti.designer.eclipse.editor.Bpmn2DiagramCreator;
+import org.activiti.designer.eclipse.util.FileService;
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.graphiti.mm.pictograms.Diagram;
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -24,8 +39,8 @@ import org.eclipse.ui.wizards.newresource.BasicNewResourceWizard;
 public class CreateDefaultActivitiDiagramWizard extends BasicNewResourceWizard {
 
   private Diagram diagram;
-  private CreateDefaultActivitiDiagramNameWizardPage namePage;
-  private CreateDefaultActivitiDiagramInitialContentPage initialContentPage;
+  protected CreateDefaultActivitiDiagramNameWizardPage namePage;
+  protected CreateDefaultActivitiDiagramInitialContentPage initialContentPage;
 
   @Override
   public void addPages() {
@@ -95,7 +110,7 @@ public class CreateDefaultActivitiDiagramWizard extends BasicNewResourceWizard {
   @Override
   public boolean performFinish() {
 
-    final IFile diagramFile = getDiagramFile();
+    final IFile dataFile = getDiagramFile();
 
     String tempFileName = null;
 		if(initialContentPage.contentSourceTemplate.getSelection() == true &&
@@ -111,8 +126,16 @@ public class CreateDefaultActivitiDiagramWizard extends BasicNewResourceWizard {
 			@Override
 			public void run(IProgressMonitor monitor) throws InvocationTargetException {
 				try {
+				  IPath path = dataFile.getFullPath();
+				  
+				  // get or create the corresponding temporary folder
+			    final IFolder tempFolder = FileService.getOrCreateTempFolder(path);
+
+			    // finally get the diagram file that corresponds to the data file
+			    final IFile diagramFile = FileService.getTemporaryDiagramFile(path, tempFolder);
+			    
 				  Bpmn2DiagramCreator creator = new Bpmn2DiagramCreator();
-				  creator.createBpmnDiagram(null, diagramFile, null, contentFileName, true);
+				  creator.createBpmnDiagram(dataFile, diagramFile, null, contentFileName, true);
 				} catch (Exception e) {
 					e.printStackTrace();
 				} finally {
@@ -145,7 +168,7 @@ public class CreateDefaultActivitiDiagramWizard extends BasicNewResourceWizard {
     return (CreateDefaultActivitiDiagramNameWizardPage) getPage(CreateDefaultActivitiDiagramNameWizardPage.PAGE_NAME);
   }
 
-  private String getDiagramName() {
+  protected String getDiagramName() {
     return getNamePage().getDiagramName();
   }
 

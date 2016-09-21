@@ -1,18 +1,35 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.features;
 
 import org.activiti.bpmn.model.Activity;
 import org.activiti.bpmn.model.BaseElement;
 import org.activiti.bpmn.model.BoundaryEvent;
+import org.activiti.bpmn.model.BpmnModel;
+import org.activiti.bpmn.model.CompensateEventDefinition;
 import org.activiti.bpmn.model.EndEvent;
 import org.activiti.bpmn.model.FlowNode;
 import org.activiti.bpmn.model.Lane;
+import org.activiti.bpmn.model.Process;
 import org.activiti.bpmn.model.SequenceFlow;
 import org.activiti.bpmn.model.StartEvent;
 import org.activiti.bpmn.model.SubProcess;
 import org.activiti.designer.PluginImage;
-import org.activiti.designer.eclipse.preferences.PreferencesUtil;
+import org.activiti.designer.eclipse.common.ActivitiPlugin;
 import org.activiti.designer.util.editor.ModelHandler;
 import org.activiti.designer.util.preferences.Preferences;
+import org.activiti.designer.util.preferences.PreferencesUtil;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.graphiti.features.IFeatureProvider;
 import org.eclipse.graphiti.features.context.ICreateConnectionContext;
@@ -40,8 +57,39 @@ public class CreateSequenceFlowFeature extends AbstractCreateBPMNConnectionFeatu
       } else if (source instanceof EndEvent) {
         // prevent adding outgoing connections from EndEvents
         return false;
+      } else {
+        for (SequenceFlow flow : source.getOutgoingFlows()) {
+          if (flow.getTargetRef().equals(target.getId())) {
+            return false;
+          }
+        }
+        
+        if (source instanceof BoundaryEvent) {
+          BoundaryEvent event = (BoundaryEvent) source;
+          if (event.getEventDefinitions().size() > 0 && event.getEventDefinitions().get(0) instanceof CompensateEventDefinition) {
+            return false;
+          }
+        }
+        
+        BpmnModel bpmnModel = ModelHandler.getModel(EcoreUtil.getURI(getDiagram())).getBpmnModel();
+        Process sourceProcess = null;
+        Process targetProcess = null;
+        for (Process process : bpmnModel.getProcesses()) {
+          if (process.getFlowElementRecursive(source.getId()) != null) {
+            sourceProcess = process;
+          }
+          
+          if (process.getFlowElementRecursive(target.getId()) != null) {
+            targetProcess = process;
+          }
+        }
+        
+        if (sourceProcess != null && targetProcess != null && sourceProcess.equals(targetProcess) == false) {
+          return false;
+        }
+        
+        return true;
       }
-      return true;
     }
     return false;
   }
@@ -88,14 +136,14 @@ public class CreateSequenceFlowFeature extends AbstractCreateBPMNConnectionFeatu
   /**
    * Creates a SequenceFlow between two BaseElements.
    */
-  private SequenceFlow createSequenceFlow(FlowNode source, FlowNode target, ICreateConnectionContext context) {
+  protected SequenceFlow createSequenceFlow(FlowNode source, FlowNode target, ICreateConnectionContext context) {
     SequenceFlow sequenceFlow = new SequenceFlow();
 
     sequenceFlow.setId(getNextId());
     sequenceFlow.setSourceRef(source.getId());
     sequenceFlow.setTargetRef(target.getId());
 
-    if (PreferencesUtil.getBooleanPreference(Preferences.EDITOR_ADD_LABELS_TO_NEW_SEQUENCEFLOWS)) {
+    if (PreferencesUtil.getBooleanPreference(Preferences.EDITOR_ADD_LABELS_TO_NEW_SEQUENCEFLOWS, ActivitiPlugin.getDefault())) {
       sequenceFlow.setName(String.format("to %s", target.getName()));
     } else {
       sequenceFlow.setName("");
@@ -144,7 +192,7 @@ public class CreateSequenceFlowFeature extends AbstractCreateBPMNConnectionFeatu
 
   @Override
   protected Class< ? extends BaseElement> getFeatureClass() {
-    return new SequenceFlow().getClass();
+    return SequenceFlow.class;
   }
 
 }

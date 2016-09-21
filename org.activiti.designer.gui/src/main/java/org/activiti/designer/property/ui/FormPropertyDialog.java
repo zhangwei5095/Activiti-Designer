@@ -1,3 +1,16 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.property.ui;
 
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -49,7 +62,7 @@ public class FormPropertyDialog extends Dialog implements ITabbedPropertyConstan
 
 	public FormPropertyDialog(Shell parent, TableItem[] fieldList) {
 		// Pass the default styles here
-		this(parent, fieldList, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL);
+		this(parent, fieldList, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL | SWT.RESIZE);
 	}
 	
 	public FormPropertyDialog(Shell parent, TableItem[] fieldList, String savedId, 
@@ -57,7 +70,7 @@ public class FormPropertyDialog extends Dialog implements ITabbedPropertyConstan
 	        String savedDefaultExpression, String savedDatePattern, String savedRequired, String savedReadable, 
 	        String savedWriteable, String savedFormValues) {
     // Pass the default styles here
-    this(parent, fieldList, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL);
+    this(parent, fieldList, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL | SWT.RESIZE);
     this.savedId = savedId;
     this.savedName = savedName;
     this.savedType = savedType;
@@ -87,7 +100,7 @@ public class FormPropertyDialog extends Dialog implements ITabbedPropertyConstan
 		Shell shell = new Shell(getParent(), getStyle());
 		shell.setBackground(Display.getDefault().getSystemColor(SWT.COLOR_WHITE));
 		shell.setText(getText());
-		shell.setSize(700, 650);
+		shell.setSize(700, 700);
 		Point location = getParent().getShell().getLocation();
 		Point size = getParent().getShell().getSize();
 		shell.setLocation((location.x + size.x - 300) / 2, (location.y + size.y - 150) / 2);

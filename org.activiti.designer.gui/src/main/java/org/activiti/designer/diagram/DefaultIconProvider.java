@@ -1,3 +1,16 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 /* Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -11,6 +24,8 @@
  * limitations under the License.
  */
 package org.activiti.designer.diagram;
+
+import java.util.List;
 
 import org.activiti.bpmn.model.BoundaryEvent;
 import org.activiti.bpmn.model.BusinessRuleTask;
@@ -42,7 +57,14 @@ import org.activiti.bpmn.model.alfresco.AlfrescoStartEvent;
 import org.activiti.designer.Activator;
 import org.activiti.designer.PluginImage;
 import org.activiti.designer.eclipse.extension.icon.IconProvider;
+import org.activiti.designer.util.eclipse.ActivitiUiUtil;
+import org.activiti.designer.util.extension.CustomServiceTaskContext;
+import org.activiti.designer.util.extension.ExtensionUtil;
+import org.eclipse.graphiti.ui.editor.DiagramEditor;
+import org.eclipse.graphiti.ui.internal.GraphitiUIPlugin;
+import org.eclipse.jface.resource.ImageRegistry;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.ui.PlatformUI;
 
 /**
  * @author Tiese Barrell
@@ -108,6 +130,20 @@ public class DefaultIconProvider implements IconProvider {
       if (ServiceTask.MAIL_TASK.equalsIgnoreCase(serviceTask.getType())) {
         result = Activator.getImage(PluginImage.IMG_MAILTASK);
       } else {
+        
+        if (ExtensionUtil.isCustomServiceTask(context)) {
+          DiagramEditor editor = (DiagramEditor) PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().getActiveEditor();
+          final List<CustomServiceTaskContext> customServiceTaskContexts = ExtensionUtil.getCustomServiceTaskContexts(
+                  ActivitiUiUtil.getProjectFromDiagram(editor.getDiagramTypeProvider().getDiagram()));
+          for (CustomServiceTaskContext customServiceTaskContext : customServiceTaskContexts) {
+            if (customServiceTaskContext.getServiceTask().getId().equals(serviceTask.getExtensionId())) {
+              @SuppressWarnings("restriction")
+              final ImageRegistry reg = GraphitiUIPlugin.getDefault().getImageRegistry();
+              return reg.get(editor.getDiagramTypeProvider().getProviderId() + "||" + customServiceTaskContext.getSmallImageKey());
+            }
+          }
+        }
+        
         result = Activator.getImage(PluginImage.IMG_SERVICETASK);
       }
     } else if (context instanceof ScriptTask) {
@@ -124,9 +160,9 @@ public class DefaultIconProvider implements IconProvider {
       } else {
         if(((StartEvent) context).getEventDefinitions().size() > 0) {
           if(((StartEvent) context).getEventDefinitions().get(0) instanceof TimerEventDefinition) {
-            result = Activator.getImage(PluginImage.IMG_BOUNDARY_TIMER);
+            result = Activator.getImage(PluginImage.IMG_EVENT_TIMER);
           } else {
-            result = Activator.getImage(PluginImage.IMG_BOUNDARY_ERROR);
+            result = Activator.getImage(PluginImage.IMG_EVENT_ERROR);
           }
         } else {
           result = Activator.getImage(PluginImage.IMG_STARTEVENT_NONE);
@@ -137,9 +173,9 @@ public class DefaultIconProvider implements IconProvider {
       EndEvent endEvent = (EndEvent) context;
       for (EventDefinition eventDefinition : endEvent.getEventDefinitions()) {
         if (eventDefinition instanceof ErrorEventDefinition) {
-          result = Activator.getImage(PluginImage.IMG_ENDEVENT_ERROR);
+          result = Activator.getImage(PluginImage.IMG_EVENT_ERROR);
         } else if (eventDefinition instanceof TerminateEventDefinition) {
-          result = Activator.getImage(PluginImage.IMG_ENDEVENT_TERMINATE);
+          result = Activator.getImage(PluginImage.IMG_EVENT_TERMINATE);
         }
       }
       if (result == null) {
@@ -150,29 +186,29 @@ public class DefaultIconProvider implements IconProvider {
       if(((BoundaryEvent) context).getEventDefinitions().size() > 0) {
         EventDefinition definition = ((BoundaryEvent) context).getEventDefinitions().get(0);
         if (definition instanceof ErrorEventDefinition) {
-          result = Activator.getImage(PluginImage.IMG_BOUNDARY_ERROR);
+          result = Activator.getImage(PluginImage.IMG_EVENT_ERROR);
         } else if (definition instanceof SignalEventDefinition) {
-          result = Activator.getImage(PluginImage.IMG_BOUNDARY_SIGNAL);
+          result = Activator.getImage(PluginImage.IMG_EVENT_SIGNAL);
         } else if (definition instanceof MessageEventDefinition) {
-          result = Activator.getImage(PluginImage.IMG_BOUNDARY_MESSAGE);
+          result = Activator.getImage(PluginImage.IMG_EVENT_MESSAGE);
         } else {
-          result = Activator.getImage(PluginImage.IMG_BOUNDARY_TIMER);
+          result = Activator.getImage(PluginImage.IMG_EVENT_TIMER);
         }
       }
     } else if (context instanceof IntermediateCatchEvent) {
       if(((IntermediateCatchEvent) context).getEventDefinitions().size() > 0) {
         EventDefinition definition = ((IntermediateCatchEvent) context).getEventDefinitions().get(0);
         if(definition instanceof SignalEventDefinition) {
-          result = Activator.getImage(PluginImage.IMG_BOUNDARY_SIGNAL);
+          result = Activator.getImage(PluginImage.IMG_EVENT_SIGNAL);
         } else {
-          result = Activator.getImage(PluginImage.IMG_BOUNDARY_TIMER);
+          result = Activator.getImage(PluginImage.IMG_EVENT_TIMER);
         }
       }
     } else if (context instanceof ThrowEvent) {
       if(((ThrowEvent) context).getEventDefinitions().size() > 0) {
-        result = Activator.getImage(PluginImage.IMG_BOUNDARY_SIGNAL);
+        result = Activator.getImage(PluginImage.IMG_EVENT_SIGNAL);
       } else {
-        result = Activator.getImage(PluginImage.IMG_BOUNDARY_TIMER);
+        result = Activator.getImage(PluginImage.IMG_EVENT_TIMER);
       }
     } else {
       throw new IllegalArgumentException("This provider has no Icon for the provided context");

@@ -1,12 +1,27 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.features;
 
+import org.activiti.bpmn.model.Activity;
 import org.activiti.bpmn.model.Association;
 import org.activiti.bpmn.model.BaseElement;
+import org.activiti.bpmn.model.BoundaryEvent;
+import org.activiti.bpmn.model.CompensateEventDefinition;
 import org.activiti.bpmn.model.Lane;
 import org.activiti.bpmn.model.SubProcess;
 import org.activiti.bpmn.model.TextAnnotation;
 import org.activiti.designer.PluginImage;
-import org.activiti.designer.util.editor.Bpmn2MemoryModel;
 import org.activiti.designer.util.editor.ModelHandler;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.graphiti.features.IFeatureProvider;
@@ -32,8 +47,15 @@ public class CreateAssociationFeature extends AbstractCreateBPMNConnectionFeatur
     
     boolean canCreate = false;
     
-    if (sourceBo != targetBo && (sourceBo instanceof TextAnnotation || targetBo instanceof TextAnnotation)) {
-      canCreate = true;
+    if (sourceBo != targetBo) {
+      if (sourceBo instanceof TextAnnotation || targetBo instanceof TextAnnotation) {
+        canCreate = true;
+      } else if (sourceBo instanceof BoundaryEvent) {
+        BoundaryEvent event = (BoundaryEvent) sourceBo;
+        if (event.getEventDefinitions().size() > 0 && event.getEventDefinitions().get(0) instanceof CompensateEventDefinition) {
+          canCreate = true;
+        }
+      }
     }
     
     return canCreate;
@@ -53,16 +75,15 @@ public class CreateAssociationFeature extends AbstractCreateBPMNConnectionFeatur
       // create new association
       final Association association = createAssociation(sourceBo, targetBo, context);
       
-      final AddConnectionContext addContext = new AddConnectionContext(sourceAnchor
-                                                                     , targetAnchor);
+      final AddConnectionContext addContext = new AddConnectionContext(sourceAnchor, targetAnchor);
       addContext.setNewObject(association);
       
       return (Connection) getFeatureProvider().addIfPossible(addContext);
     }
   }
   
-  private Association createAssociation(final BaseElement sourceBo, final BaseElement targetBo
-                                      , final ICreateConnectionContext context) {
+  protected Association createAssociation(final BaseElement sourceBo, final BaseElement targetBo, 
+          final ICreateConnectionContext context) {
     
     final Association association = new Association();
     
@@ -70,25 +91,28 @@ public class CreateAssociationFeature extends AbstractCreateBPMNConnectionFeatur
     association.setSourceRef(sourceBo.getId());
     association.setTargetRef(targetBo.getId());
     
-    final ContainerShape targetContainer = (ContainerShape) context.getSourcePictogramElement();
-    final ContainerShape parentContainer = targetContainer.getContainer();
-    
-    if (parentContainer instanceof Diagram) {
-      final Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
-      if (model.getBpmnModel().getPools().size() > 0) {
-        String poolRef = model.getBpmnModel().getPools().get(0).getId();
-        model.getBpmnModel().getProcess(poolRef).addArtifact(association);
-      } else {
-        model.getBpmnModel().getMainProcess().addArtifact(association);
+    ContainerShape targetContainer = null;
+    if (sourceBo instanceof BoundaryEvent) {
+      BoundaryEvent boundaryEvent = (BoundaryEvent) sourceBo;
+      if (boundaryEvent.getAttachedToRef() != null) {
+        Activity attachedActivity = boundaryEvent.getAttachedToRef();
+        targetContainer = (ContainerShape) getFeatureProvider().getPictogramElementForBusinessObject(attachedActivity);
       }
     } else {
-      final Object parentBo = getBusinessObjectForPictogramElement(parentContainer);
+      targetContainer = (ContainerShape) context.getSourcePictogramElement();
+    }
       
-      if (parentBo instanceof SubProcess) {
-        final SubProcess subProcess = (SubProcess) parentBo;
-        subProcess.addArtifact(association);
-      } else if (parentBo instanceof Lane) {
-        final Lane lane = (Lane) parentBo;
+    ContainerShape parentContainer = targetContainer.getContainer();
+    if (parentContainer instanceof Diagram) {
+      ModelHandler.getModel(EcoreUtil.getURI(getDiagram())).getBpmnModel().getMainProcess().addArtifact(association);
+
+    } else {
+      Object parentObject = getBusinessObjectForPictogramElement(parentContainer);
+      if (parentObject instanceof SubProcess) {
+        ((SubProcess) parentObject).addArtifact(association);
+
+      } else if (parentObject instanceof Lane) {
+        Lane lane = (Lane) parentObject;
         lane.getParentProcess().addArtifact(association);
       }
     }

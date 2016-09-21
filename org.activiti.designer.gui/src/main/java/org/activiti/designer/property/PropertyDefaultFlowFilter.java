@@ -1,27 +1,25 @@
-/*******************************************************************************
- * <copyright>
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Copyright (c) 2005, 2010 SAP AG.
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Contributors:
- *    SAP AG - initial API, implementation and documentation
- *
- * </copyright>
- *
- *******************************************************************************/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.property;
 
 import java.util.List;
 
 import org.activiti.bpmn.model.Activity;
 import org.activiti.bpmn.model.ExclusiveGateway;
+import org.activiti.bpmn.model.FlowNode;
 import org.activiti.bpmn.model.InclusiveGateway;
 import org.activiti.bpmn.model.SequenceFlow;
-import org.activiti.designer.util.property.ActivitiPropertyFilter;
 import org.eclipse.graphiti.mm.pictograms.PictogramElement;
 
 public class PropertyDefaultFlowFilter extends ActivitiPropertyFilter {
@@ -32,15 +30,9 @@ public class PropertyDefaultFlowFilter extends ActivitiPropertyFilter {
   	 if (bo instanceof Activity || bo instanceof ExclusiveGateway ||
              bo instanceof InclusiveGateway) {
        
-       List<SequenceFlow> flowList = null;
-       if(bo instanceof Activity) {
-         flowList = ((Activity) bo).getOutgoingFlows();
-       } else if(bo instanceof ExclusiveGateway) {
-         flowList = ((ExclusiveGateway) bo).getOutgoingFlows();
-       } else {
-         flowList = ((InclusiveGateway) bo).getOutgoingFlows();
-       }
-       if(flowList != null && flowList.size() > 1) {
+       List<SequenceFlow> flowList = ((FlowNode) bo).getOutgoingFlows();
+       
+       if (flowList != null && flowList.size() > 1) {
          return true;
        }
   	 }

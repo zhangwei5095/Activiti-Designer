@@ -1,177 +1,69 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.property;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 import org.activiti.bpmn.model.BoundaryEvent;
-import org.activiti.bpmn.model.Signal;
-import org.activiti.bpmn.model.SignalEventDefinition;
-import org.activiti.designer.util.eclipse.ActivitiUiUtil;
-import org.activiti.designer.util.editor.Bpmn2MemoryModel;
-import org.activiti.designer.util.editor.ModelHandler;
-import org.activiti.designer.util.property.ActivitiPropertySection;
-import org.apache.commons.lang.StringUtils;
-import org.eclipse.emf.ecore.util.EcoreUtil;
-import org.eclipse.emf.transaction.TransactionalEditingDomain;
-import org.eclipse.graphiti.mm.pictograms.PictogramElement;
-import org.eclipse.graphiti.ui.editor.DiagramEditor;
-import org.eclipse.swt.SWT;
-import org.eclipse.swt.custom.CCombo;
-import org.eclipse.swt.custom.CLabel;
-import org.eclipse.swt.events.FocusEvent;
-import org.eclipse.swt.events.FocusListener;
-import org.eclipse.swt.layout.FormAttachment;
-import org.eclipse.swt.layout.FormData;
-import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.ui.views.properties.tabbed.ITabbedPropertyConstants;
 import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetPage;
-import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetWidgetFactory;
 
 public class PropertyBoundarySignalSection extends ActivitiPropertySection implements ITabbedPropertyConstants {
 
-	private CCombo cancelActivityCombo;
-	private List<String> cancelFormats = Arrays.asList("true", "false");
-	private CCombo signalCombo;
-
-	@Override
-	public void createControls(Composite parent, TabbedPropertySheetPage tabbedPropertySheetPage) {
-		super.createControls(parent, tabbedPropertySheetPage);
-
-		TabbedPropertySheetWidgetFactory factory = getWidgetFactory();
-		Composite composite = factory.createFlatFormComposite(parent);
-		FormData data;
-		
-		cancelActivityCombo = factory.createCCombo(composite, SWT.NONE);
-		cancelActivityCombo.setItems((String[]) cancelFormats.toArray());
-		data = new FormData();
-		data.left = new FormAttachment(0, 160);
-		data.right = new FormAttachment(100, 0);
-		data.top = new FormAttachment(0, VSPACE);
-		cancelActivityCombo.setLayoutData(data);
-		cancelActivityCombo.addFocusListener(listener);
-		
-		createLabel(composite, "Cancel activity", cancelActivityCombo, factory); //$NON-NLS-1$
-
-		signalCombo = getWidgetFactory().createCCombo(composite, SWT.NONE);
-    data = new FormData();
-    data.left = new FormAttachment(0, 160);
-    data.right = new FormAttachment(100, -HSPACE);
-    data.top = new FormAttachment(cancelActivityCombo, VSPACE);
-    signalCombo.setLayoutData(data);
-    signalCombo.addFocusListener(listener);
-
-		createLabel(composite, "Signal ref", signalCombo, factory); //$NON-NLS-1$
-	}
-
-	@Override
-	public void refresh() {
-		cancelActivityCombo.removeFocusListener(listener);
-		signalCombo.removeFocusListener(listener);
-
-		PictogramElement pe = getSelectedPictogramElement();
-		if (pe != null) {
-			Object bo = getBusinessObject(pe);
-			if (bo == null)
-				return;
-			
-			final Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
-	    if (model == null) {
-	      return;
-	    }
-			
-			boolean cancelActivity = ((BoundaryEvent) bo).isCancelActivity();
-			if(cancelActivity == false) {
-				cancelActivityCombo.select(1);
-			} else {
-				cancelActivityCombo.select(0);
-			}
-			
-			
-			String signalRef = null;
-			if(bo instanceof BoundaryEvent) {
-  			BoundaryEvent boundaryEvent = (BoundaryEvent) bo;
-  			if(boundaryEvent.getEventDefinitions().get(0) != null) {
-  			  SignalEventDefinition signalDefinition = (SignalEventDefinition) boundaryEvent.getEventDefinitions().get(0);
-          if(StringUtils.isNotEmpty(signalDefinition.getSignalRef())) {
-          	signalRef = signalDefinition.getSignalRef();
-          }
-  			}
-			}
-			
-			String[] items = new String[model.getBpmnModel().getSignals().size() + 1];
-			items[0] = "";
-			int counter = 1;
-			int selectedCounter = 0;
-			for (Signal signal : model.getBpmnModel().getSignals()) {
-	      items[counter] = signal.getId() + " / " + signal.getName();
-	      if(signal.getId().equals(signalRef)) {
-	      	selectedCounter = counter;
-	      }
-	      counter++;
-      }
-			
-			signalCombo.setItems(items);
-			signalCombo.select(selectedCounter);
-		}
-		cancelActivityCombo.addFocusListener(listener);
-		signalCombo.addFocusListener(listener);
-	}
-
-	private FocusListener listener = new FocusListener() {
-
-		public void focusGained(final FocusEvent e) {
-		}
-
-		public void focusLost(final FocusEvent e) {
-			final Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
-	    if (model == null) {
-	      return;
-	    }
-	    
-			PictogramElement pe = getSelectedPictogramElement();
-			if (pe != null) {
-				final Object bo = getBusinessObject(pe);
-				if (bo instanceof BoundaryEvent) {
-					DiagramEditor diagramEditor = (DiagramEditor) getDiagramEditor();
-					TransactionalEditingDomain editingDomain = diagramEditor.getEditingDomain();
-					ActivitiUiUtil.runModelChange(new Runnable() {
-						public void run() {
-							
-							if(bo instanceof BoundaryEvent) {
-  							BoundaryEvent boundaryEvent = (BoundaryEvent) bo;
-  							
-  							int selection = cancelActivityCombo.getSelectionIndex();
-  							if(selection == 0) {
-  								boundaryEvent.setCancelActivity(true);
-  							} else {
-  								boundaryEvent.setCancelActivity(false);
-  							}
-  							
-  							SignalEventDefinition signalDefinition = (SignalEventDefinition) boundaryEvent.getEventDefinitions().get(0);
-  							if(signalCombo.getSelectionIndex() > 0) {
-  							  List<Signal> signalList = new ArrayList<Signal>(model.getBpmnModel().getSignals());
-                  signalDefinition.setSignalRef(signalList.get(signalCombo.getSelectionIndex() - 1).getId());
-                } else {
-                  signalDefinition.setSignalRef("");
-                }
-							}
-						}
-					}, editingDomain, "Model Update");
-				}
-
-			}
-		}
-	};
+	protected Combo cancelActivityCombo;
+	protected String[] cancelFormats = new String[] {"true", "false"};
+	protected Combo signalCombo;
+	protected String[] signalArray;
 	
-	private CLabel createLabel(Composite parent, String text, Control control, TabbedPropertySheetWidgetFactory factory) {
-    CLabel label = factory.createCLabel(parent, text); //$NON-NLS-1$
-    FormData data = new FormData();
-    data.left = new FormAttachment(0, 0);
-    data.right = new FormAttachment(control, -HSPACE);
-    data.top = new FormAttachment(control, 0, SWT.TOP);
-    label.setLayoutData(data);
-    return label;
+	@Override
+  public void createFormControls(TabbedPropertySheetPage aTabbedPropertySheetPage) {
+    cancelActivityCombo = createCombobox(cancelFormats, 0);
+    createLabel("Cancel activity", cancelActivityCombo);
+    signalCombo = createCombobox(signalArray, 0);
+    createLabel("Signal ref", signalCombo);
+  }
+	
+
+  @Override
+  protected void populateControl(Control control, Object businessObject) {
+    if (control == signalCombo) {
+      SignalPropertyUtil.fillSignalCombo(signalCombo, selectionListener, getDiagram());
+    }
+    super.populateControl(control, businessObject);
+  }
+
+
+  @Override
+  protected Object getModelValueForControl(Control control, Object businessObject) {
+    BoundaryEvent event = (BoundaryEvent) businessObject;
+    if (control == cancelActivityCombo) {
+      return String.valueOf(event.isCancelActivity());
+      
+    } else if (control == signalCombo) {
+      return SignalPropertyUtil.getSignalValue(event, getDiagram(), getDiagramContainer());
+    }
+    return null;
+  }
+
+  @Override
+  protected void storeValueInModel(Control control, Object businessObject) {
+    BoundaryEvent event = (BoundaryEvent) businessObject;
+    if (control == cancelActivityCombo) {
+      event.setCancelActivity(Boolean.valueOf(cancelFormats[cancelActivityCombo.getSelectionIndex()]));
+      
+    } else if (control == signalCombo) {
+      SignalPropertyUtil.storeSignalValue(signalCombo, event, getDiagram());
+    }
   }
 }

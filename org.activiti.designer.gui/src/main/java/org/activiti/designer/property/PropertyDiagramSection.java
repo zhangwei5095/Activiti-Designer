@@ -1,293 +1,262 @@
-/*******************************************************************************
- * <copyright>
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Copyright (c) 2005, 2010 SAP AG.
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Contributors:
- *    SAP AG - initial API, implementation and documentation
- *
- * </copyright>
- *
- *******************************************************************************/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.property;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.activiti.bpmn.model.BaseElement;
+import org.activiti.bpmn.model.ExtensionAttribute;
+import org.activiti.bpmn.model.ExtensionElement;
 import org.activiti.bpmn.model.Pool;
 import org.activiti.bpmn.model.Process;
-import org.activiti.designer.util.eclipse.ActivitiUiUtil;
-import org.activiti.designer.util.editor.Bpmn2MemoryModel;
-import org.activiti.designer.util.editor.ModelHandler;
-import org.activiti.designer.util.property.ActivitiPropertySection;
+import org.activiti.designer.eclipse.common.ActivitiPlugin;
+import org.activiti.designer.util.bpmn.BpmnExtensions;
+import org.activiti.designer.util.editor.BpmnMemoryModel;
+import org.activiti.designer.util.preferences.Preferences;
+import org.activiti.designer.util.preferences.PreferencesUtil;
 import org.apache.commons.lang.StringUtils;
-import org.eclipse.emf.ecore.util.EcoreUtil;
-import org.eclipse.emf.transaction.TransactionalEditingDomain;
-import org.eclipse.graphiti.mm.pictograms.Diagram;
-import org.eclipse.graphiti.ui.editor.DiagramEditor;
-import org.eclipse.swt.SWT;
-import org.eclipse.swt.custom.CLabel;
-import org.eclipse.swt.events.FocusEvent;
-import org.eclipse.swt.events.FocusListener;
-import org.eclipse.swt.layout.FormAttachment;
-import org.eclipse.swt.layout.FormData;
-import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.views.properties.tabbed.ITabbedPropertyConstants;
 import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetPage;
-import org.eclipse.ui.views.properties.tabbed.TabbedPropertySheetWidgetFactory;
 
 public class PropertyDiagramSection extends ActivitiPropertySection implements ITabbedPropertyConstants {
 
-	private Text idText;
-	private Text nameText;
-	private Text namespaceText;
-	private Text documentationText;
-	private Text candidateStarterUsersText;
-	private Text candidateStarterGroupsText;
+  protected Text idText;
+  protected Text nameText;
+  protected Text namespaceText;
+  protected Text documentationText;
+  protected Text candidateStarterUsersText;
+  protected Text candidateStarterGroupsText;
+  protected List<String> languages;
+  protected Map<Text, String> languageTextMap = new HashMap<Text, String>();
 	
-
+  protected BpmnMemoryModel model = null;
+	protected Process currentProcess = null;
+	
 	@Override
-	public void createControls(Composite parent, TabbedPropertySheetPage tabbedPropertySheetPage) {
-		super.createControls(parent, tabbedPropertySheetPage);
-
-		TabbedPropertySheetWidgetFactory factory = getWidgetFactory();
-		Composite composite = factory.createFlatFormComposite(parent);
-		FormData data;
-
-		idText = createText(composite, factory, null);
-		createLabel(composite, "Id:", idText, factory); //$NON-NLS-1$
-		
-		nameText = createText(composite, factory, idText);
-		createLabel(composite, "Name:", nameText, factory); //$NON-NLS-1$
-		
-		namespaceText = createText(composite, factory, nameText);
-		createLabel(composite, "Namespace:", namespaceText, factory); //$NON-NLS-1$
-		
-    candidateStarterUsersText = createText(composite, factory, namespaceText);
-    createLabel(composite, "Candidate start users (comma separated):",  candidateStarterUsersText, factory);
-    
-    candidateStarterGroupsText = createText(composite, factory, candidateStarterUsersText);
-    createLabel(composite, "Candidate start groups (comma separated):",  candidateStarterGroupsText, factory);
-    
-		documentationText = factory.createText(composite, "", SWT.MULTI | SWT.BORDER | SWT.WRAP | SWT.V_SCROLL); //$NON-NLS-1$
-		data = new FormData(SWT.DEFAULT, 100);
-		data.left = new FormAttachment(0, 250);
-		data.right = new FormAttachment(100, 0);
-		data.top = new FormAttachment(candidateStarterGroupsText, VSPACE);
-		documentationText.setLayoutData(data);
-		documentationText.addFocusListener(listener);
-
-		createLabel(composite, "Documentation:", documentationText, factory); //$NON-NLS-1$
-		
-	}
-
-	@Override
-	public void refresh() {
-	  idText.removeFocusListener(listener);
-		nameText.removeFocusListener(listener);
-		namespaceText.removeFocusListener(listener);
-		documentationText.removeFocusListener(listener);
-		candidateStarterUsersText.removeFocusListener(listener);
-		candidateStarterGroupsText.removeFocusListener(listener);
-		
-		Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
-		Process process = null;
-		if(getSelectedPictogramElement() instanceof Diagram) {
-		  if (model.getBpmnModel().getPools().size() > 0) {
-		    process = model.getBpmnModel().getProcess(model.getBpmnModel().getPools().get(0).getId());
-		    setEnabled(false);
-		  } else {
-		    process = model.getBpmnModel().getMainProcess();
-		    setEnabled(true);
-		  }
-		
-		} else {
-		  Pool pool = ((Pool) getBusinessObject(getSelectedPictogramElement()));
-		  process = model.getBpmnModel().getProcess(pool.getId());
-		  setEnabled(true);
-		}
-		
-		if(StringUtils.isNotEmpty(model.getBpmnModel().getTargetNamespace())) {
-      namespaceText.setText(model.getBpmnModel().getTargetNamespace());
+  public void createFormControls(TabbedPropertySheetPage aTabbedPropertySheetPage) {
+    idText = createTextControl(false);
+    createLabel("Id", idText);
+    languages = PreferencesUtil.getStringArray(Preferences.ACTIVITI_LANGUAGES, ActivitiPlugin.getDefault());
+    if (languages != null && languages.size() > 0) {
+      for (String language : languages) {
+        Text languageText = createTextControl(false);
+        createLabel("Name (" + language + ")", languageText);
+        languageTextMap.put(languageText, language);  
+      }
     } else {
-      namespaceText.setText("http://www.activiti.org/test");
+      nameText = createTextControl(false);
+      createLabel("Name", nameText);
     }
-		
-		if (process != null) {
-  		idText.setText(process.getId());
-  		if(StringUtils.isNotEmpty(process.getName())) {
-  		  nameText.setText(process.getName());
-  		} else {
-  		  nameText.setText("");
-  		}
-  		if(StringUtils.isNotEmpty(process.getDocumentation())) {
-  			documentationText.setText(process.getDocumentation());
-  		} else {
-  			documentationText.setText("");
-  		}
-  		
-  		candidateStarterUsersText.setText("");
-      if (process.getCandidateStarterUsers().size() > 0) {
-        StringBuffer expressionBuffer = new StringBuffer();
-        for (String user : process.getCandidateStarterUsers()) {
-          if (expressionBuffer.length() > 0) {
-            expressionBuffer.append(",");
-          }
-          expressionBuffer.append(user.trim());
-        }
-        candidateStarterUsersText.setText(expressionBuffer.toString());
-      } 
-  		
-  		candidateStarterGroupsText.setText("");
-  		if (process.getCandidateStarterGroups().size() > 0) {
-  			StringBuffer expressionBuffer = new StringBuffer();
-  			for (String group : process.getCandidateStarterGroups()) {
-  				if (expressionBuffer.length() > 0) {
-  					expressionBuffer.append(",");
-  				}
-  				expressionBuffer.append(group.trim());
-  			}
-  			candidateStarterGroupsText.setText(expressionBuffer.toString());
-  		}
-		}
-		
-		idText.addFocusListener(listener);
-		nameText.addFocusListener(listener);
-		namespaceText.addFocusListener(listener);
-		documentationText.addFocusListener(listener);
-		candidateStarterUsersText.addFocusListener(listener);
-		candidateStarterGroupsText.addFocusListener(listener);
-	}
+    namespaceText = createTextControl(false);
+    createLabel("Namespace", namespaceText);
+    candidateStarterUsersText = createTextControl(false);
+    createLabel("Candidate start users (comma separated)", candidateStarterUsersText);
+    candidateStarterGroupsText = createTextControl(false);
+    createLabel("Candidate start groups (comma separated)", candidateStarterGroupsText);
+    documentationText = createTextControl(true);
+    createLabel("Documentation", documentationText);
+  }
 	
-	private void setEnabled(boolean enabled) {
+	
+
+  @Override
+  public void refresh() {
+    Object businessObject = getBusinessObject(getSelectedPictogramElement());
+    
+    model = getModel(getSelectedPictogramElement());
+    if (businessObject instanceof Process) {
+      currentProcess = (Process) businessObject;
+      if (model.getBpmnModel().getPools().size() > 0) {
+        setEnabled(false);
+      } else {
+        setEnabled(true);
+      }
+      
+    } else if (businessObject instanceof Pool) {
+      Pool pool = (Pool) businessObject;
+      currentProcess = model.getBpmnModel().getProcess(pool.getId());
+      setEnabled(true);
+    }
+    
+    super.refresh();
+  }
+
+
+
+  @Override
+  protected Object getModelValueForControl(Control control, Object businessObject) {
+    if (languages != null && languages.size() > 0) {
+      for (Text languageText : languageTextMap.keySet()) {
+        if (control == languageText) {
+          return getName(businessObject, languageTextMap.get(languageText));
+        }
+      }
+    }
+    
+    if (control == idText) {
+      return currentProcess.getId();
+      
+    } else if (control == nameText) {
+      return currentProcess.getName();
+    
+    } else if (control == namespaceText) {
+      if (StringUtils.isNotEmpty(model.getBpmnModel().getTargetNamespace())) {
+        return model.getBpmnModel().getTargetNamespace();
+      } else {
+        return "http://www.activiti.org/test";
+      }
+      
+    } else if (control == candidateStarterUsersText) {
+      return getCommaSeperatedString(currentProcess.getCandidateStarterUsers());
+    
+    } else if (control == candidateStarterGroupsText) {
+      return getCommaSeperatedString(currentProcess.getCandidateStarterGroups());
+      
+    } else if (control == documentationText) {
+      return currentProcess.getDocumentation();
+    }
+    
+    return null;
+  }
+
+  @Override
+  protected void storeValueInModel(Control control, final Object businessObject) {
+    if (languages != null && languages.size() > 0) {
+      for (Text languageText : languageTextMap.keySet()) {
+        if (control == languageText) {
+          setName(businessObject, languageText.getText(), languageTextMap.get(languageText));
+        }
+      }
+    }
+    
+    if (control == idText) {
+      currentProcess.setId(idText.getText());
+      if (businessObject instanceof Pool) {
+        Pool pool = (Pool) businessObject;
+        pool.setProcessRef(currentProcess.getId());
+      } else if (businessObject instanceof Process) {
+        ((Process) businessObject).setId(currentProcess.getId());
+      }
+      
+    } else if (control == nameText) {
+      currentProcess.setName(nameText.getText());
+      if (businessObject instanceof Process) {
+        ((Process) businessObject).setName(currentProcess.getName());
+      }
+    
+    } else if (control == namespaceText) {
+      model.getBpmnModel().setTargetNamespace(namespaceText.getText());
+    
+    } else if (control == candidateStarterUsersText) {
+      currentProcess.setCandidateStarterUsers(commaSeperatedStringToList(candidateStarterUsersText.getText()));
+      if (businessObject instanceof Process) {
+        ((Process) businessObject).setCandidateStarterUsers(currentProcess.getCandidateStarterUsers());
+      }
+    
+    } else if (control == candidateStarterGroupsText) {
+      currentProcess.setCandidateStarterGroups(commaSeperatedStringToList(candidateStarterGroupsText.getText()));
+      if (businessObject instanceof Process) {
+        ((Process) businessObject).setCandidateStarterGroups(currentProcess.getCandidateStarterGroups());
+      }
+    
+    } else if (control == documentationText) {
+      currentProcess.setDocumentation(documentationText.getText());
+      if (businessObject instanceof Process) {
+        ((Process) businessObject).setDocumentation(currentProcess.getDocumentation());
+      }
+    }
+  }
+	
+  protected void setEnabled(boolean enabled) {
 	  idText.setEnabled(enabled);
-    nameText.setEnabled(enabled);
+	  if (languageTextMap.size() > 0) {
+      for (Text languageText : languageTextMap.keySet()) {
+        languageText.setEnabled(enabled);
+      }
+    } else {
+      nameText.setEnabled(enabled);
+    }
     namespaceText.setEnabled(enabled);
     documentationText.setEnabled(enabled);
     candidateStarterUsersText.setEnabled(enabled);
     candidateStarterGroupsText.setEnabled(enabled);
 	}
-
-	private FocusListener listener = new FocusListener() {
-
-		public void focusGained(final FocusEvent e) {
-		}
-
-		public void focusLost(final FocusEvent e) {
-			DiagramEditor diagramEditor = (DiagramEditor) getDiagramEditor();
-			TransactionalEditingDomain editingDomain = diagramEditor.getEditingDomain();
-			ActivitiUiUtil.runModelChange(new Runnable() {
-				public void run() {
-				  Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
-					if (model == null) {
-						return;
-					}
-					
-			    Process process = null;
-			    if(getSelectedPictogramElement() instanceof Diagram) {
-			      process = model.getBpmnModel().getMainProcess();
-			    
-			    } else {
-			      Pool pool = ((Pool) getBusinessObject(getSelectedPictogramElement()));
-			      process = model.getBpmnModel().getProcess(pool.getId());
-			    }
-					
-					String id = idText.getText();
-					if (id != null) {
-            process.setId(id);
-          } else {
-            process.setId("");
-          }
-					
-					if(getSelectedPictogramElement() instanceof Diagram == false) {
-					  Pool pool = ((Pool) getBusinessObject(getSelectedPictogramElement()));
-					  pool.setProcessRef(process.getId());
-					}
-					
-					String name = nameText.getText();
-					if (name != null) {
-					  process.setName(name);
-					} else {
-					  process.setName("");
-					}
-					
-					String namespace = namespaceText.getText();
-					if (namespace != null) {
-						model.getBpmnModel().setTargetNamespace(namespace);
-					} else {
-					  model.getBpmnModel().setTargetNamespace("");
-					}
-					
-					String documentation = documentationText.getText();
-					if (documentation != null) {
-					  process.setDocumentation(documentation);
-					} else {
-					  process.setDocumentation("");
-					}
-					
-					// read candidate users from control and insert them to the model
-					process.getCandidateStarterUsers().clear();
-					String candidateStartUsers = candidateStarterUsersText.getText();
-					if (StringUtils.isNotEmpty(candidateStartUsers)) {
-						String[] expressionList = null;
-            if (candidateStartUsers.contains(",")) {
-              expressionList = candidateStartUsers.split(",");
-            } else {
-              expressionList = new String[] { candidateStartUsers };
-            }
-            
-            for (String user : expressionList) {
-              process.getCandidateStarterUsers().add(user.trim());
-            }
-					}
-					
-					// read candidate groups from control and insert them to the model
-					String candidateStartGroups = candidateStarterGroupsText.getText();
-					process.getCandidateStarterGroups().clear();
-					if (StringUtils.isNotEmpty(candidateStartGroups)) {
-						String[] expressionList = null;
-            if (candidateStartGroups.contains(",")) {
-              expressionList = candidateStartGroups.split(",");
-            } else {
-              expressionList = new String[] { candidateStartGroups };
-            }
-            
-            for (String user : expressionList) {
-              process.getCandidateStarterGroups().add(user.trim());
-            }
-					}
-					
-				}
-			}, editingDomain, "Model Update");
-		}
-	};
 	
-	private Text createText(Composite parent, TabbedPropertySheetWidgetFactory factory, Control top) {
-    Text text = factory.createText(parent, ""); //$NON-NLS-1$
-    FormData data = new FormData();
-    data.left = new FormAttachment(0, 250);
-    data.right = new FormAttachment(100, -HSPACE);
-    if(top == null) {
-      data.top = new FormAttachment(0, VSPACE);
-    } else {
-      data.top = new FormAttachment(top, VSPACE);
+	protected String getName(Object bo, String language) {
+    BaseElement element = (BaseElement) bo;
+    String resultValue = null;
+    if (element.getExtensionElements().containsKey(BpmnExtensions.LANGUAGE_EXTENSION)) {
+      List<ExtensionElement> extensionElements = element.getExtensionElements().get(BpmnExtensions.LANGUAGE_EXTENSION);
+      if (extensionElements != null && extensionElements.size() > 0) {
+        for (ExtensionElement extensionElement : extensionElements) {
+          List<ExtensionAttribute> languageAttributes = extensionElement.getAttributes().get("language");
+          if (languageAttributes != null && languageAttributes.size() == 1) {
+            String languageValue = languageAttributes.get(0).getValue();
+            if (language.equals(languageValue)) {
+              resultValue = extensionElement.getElementText();
+            }
+          }
+        }
+      }
     }
-    text.setLayoutData(data);
-    text.addFocusListener(listener);
-    return text;
+    
+    if (resultValue != null && resultValue.length() > 0) {
+      return resultValue;
+    } else {
+      return "";
+    }
   }
-  
-  private CLabel createLabel(Composite parent, String text, Control control, TabbedPropertySheetWidgetFactory factory) {
-    CLabel label = factory.createCLabel(parent, text); //$NON-NLS-1$
-    FormData data = new FormData();
-    data.left = new FormAttachment(0, 0);
-    data.right = new FormAttachment(control, -HSPACE);
-    data.top = new FormAttachment(control, 0, SWT.CENTER);
-    label.setLayoutData(data);
-    return label;
+	
+	protected void setName(Object bo, String name, String language) {
+    BaseElement element = (BaseElement) bo;
+    List<ExtensionElement> extensionElements = null;
+    if (element.getExtensionElements().containsKey(BpmnExtensions.LANGUAGE_EXTENSION)) {
+      extensionElements = element.getExtensionElements().get(BpmnExtensions.LANGUAGE_EXTENSION);
+    }
+    
+    if (extensionElements == null) {
+      extensionElements = new ArrayList<ExtensionElement>();
+      element.getExtensionElements().put(BpmnExtensions.LANGUAGE_EXTENSION, extensionElements);
+    }
+    
+    ExtensionElement languageElement = null;
+    for (ExtensionElement extensionElement : extensionElements) {
+      List<ExtensionAttribute> languageAttributes = extensionElement.getAttributes().get("language");
+      if (languageAttributes != null && languageAttributes.size() == 1) {
+        String languageValue = languageAttributes.get(0).getValue();
+        if (language.equals(languageValue)) {
+          languageElement = extensionElement;
+        }
+      }
+    }
+    
+    if (languageElement == null) {
+      languageElement = new ExtensionElement();
+      languageElement.setName(BpmnExtensions.LANGUAGE_EXTENSION);
+      languageElement.setNamespace(BpmnExtensions.DESIGNER_EXTENSION_NAMESPACE);
+      languageElement.setNamespacePrefix(BpmnExtensions.DESIGNER_EXTENSION_NAMESPACE_PREFIX);
+      ExtensionAttribute languageAttribute = new ExtensionAttribute("language");
+      languageAttribute.setValue(language);
+      languageElement.addAttribute(languageAttribute);
+      extensionElements.add(languageElement);
+    }
+    
+    languageElement.setElementText(name);
   }
-
 }

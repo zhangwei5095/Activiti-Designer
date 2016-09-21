@@ -1,3 +1,16 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.features;
 
 import java.util.ArrayList;
@@ -12,7 +25,7 @@ import org.activiti.bpmn.model.Pool;
 import org.activiti.bpmn.model.Process;
 import org.activiti.bpmn.model.SequenceFlow;
 import org.activiti.bpmn.model.SubProcess;
-import org.activiti.designer.util.editor.Bpmn2MemoryModel;
+import org.activiti.designer.util.editor.BpmnMemoryModel;
 import org.activiti.designer.util.editor.ModelHandler;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.graphiti.features.IFeatureProvider;
@@ -55,7 +68,7 @@ public class DeleteLaneFeature extends DefaultDeleteFeature {
 
   protected void deleteBusinessObject(Object bo) {
 		if (bo instanceof Lane) {
-		  Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
+		  BpmnMemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
 		  Lane lane = (Lane) bo;
 		  
 		  Pool parentPool = null;
@@ -66,9 +79,11 @@ public class DeleteLaneFeature extends DefaultDeleteFeature {
 		    }
 		  }
 		  
+		  if (parentPool == null) return;
+		  
 		  Process laneProcess = model.getBpmnModel().getProcess(parentPool.getId());
 		  
-		  if (parentPool == null || laneProcess == null) return;
+		  if (laneProcess == null) return;
 		  
 		  if(laneProcess.getLanes().size() == 1) {
         Process process = model.getBpmnModel().getProcess(parentPool.getId());
@@ -152,14 +167,17 @@ public class DeleteLaneFeature extends DefaultDeleteFeature {
       toDeleteSequenceFlows.add(outgoingSequenceFlow);
     }
     for (SequenceFlow deleteObject : toDeleteSequenceFlows) {
-      IRemoveContext rc = new RemoveContext(getFeatureProvider().getPictogramElementForBusinessObject(deleteObject));
-      IFeatureProvider featureProvider = getFeatureProvider();
-      IRemoveFeature removeFeature = featureProvider.getRemoveFeature(rc);
-      if (removeFeature != null) {
-        removeFeature.remove(rc);
+      PictogramElement deleteElement = getFeatureProvider().getPictogramElementForBusinessObject(deleteObject);
+      if (deleteElement != null) {
+        IRemoveContext rc = new RemoveContext(deleteElement);
+        IFeatureProvider featureProvider = getFeatureProvider();
+        IRemoveFeature removeFeature = featureProvider.getRemoveFeature(rc);
+        if (removeFeature != null) {
+          removeFeature.remove(rc);
+        }
       }
       
-      Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
+      BpmnMemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
       FlowNode sourceNode = (FlowNode) model.getFlowElement(deleteObject.getSourceRef());
       FlowNode targetNode = (FlowNode) model.getFlowElement(deleteObject.getTargetRef());
       

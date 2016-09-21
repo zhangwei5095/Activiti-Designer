@@ -1,3 +1,16 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.features;
 
 import java.util.List;
@@ -6,7 +19,7 @@ import org.activiti.bpmn.model.Lane;
 import org.activiti.bpmn.model.Pool;
 import org.activiti.bpmn.model.Process;
 import org.activiti.designer.PluginImage;
-import org.activiti.designer.util.editor.Bpmn2MemoryModel;
+import org.activiti.designer.util.editor.BpmnMemoryModel;
 import org.activiti.designer.util.editor.ModelHandler;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.graphiti.features.IFeatureProvider;
@@ -40,7 +53,7 @@ public class CreateLaneFeature extends AbstractCreateBPMNFeature {
   @Override
   public Object[] create(ICreateContext context) {
 
-    Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
+    BpmnMemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagram()));
     Object parentBo = getFeatureProvider().getBusinessObjectForPictogramElement(context.getTargetContainer());
     Pool parentPool = null;
     if (parentBo instanceof Pool) {
@@ -76,11 +89,26 @@ public class CreateLaneFeature extends AbstractCreateBPMNFeature {
       height = poolShape.getGraphicsAlgorithm().getHeight();
 
     } else {
-      ContainerShape lastLaneShape = (ContainerShape) getFeatureProvider().getPictogramElementForBusinessObject(lanes.get(lanes.size() - 1));
-      x = lastLaneShape.getGraphicsAlgorithm().getX();
-      y = lastLaneShape.getGraphicsAlgorithm().getY() + lastLaneShape.getGraphicsAlgorithm().getHeight();
-      width = lastLaneShape.getGraphicsAlgorithm().getWidth();
-      height = lastLaneShape.getGraphicsAlgorithm().getHeight();
+      ContainerShape lastLaneShape = null;
+      for (int i = lanes.size() - 1; i >= 0; i--) {
+        lastLaneShape = (ContainerShape) getFeatureProvider().getPictogramElementForBusinessObject(lanes.get(i));
+        if (lastLaneShape != null) {
+          break;
+        }
+      }
+      
+      if (lastLaneShape != null) {
+        x = lastLaneShape.getGraphicsAlgorithm().getX();
+        y = lastLaneShape.getGraphicsAlgorithm().getY() + lastLaneShape.getGraphicsAlgorithm().getHeight();
+        width = lastLaneShape.getGraphicsAlgorithm().getWidth();
+        height = lastLaneShape.getGraphicsAlgorithm().getHeight();
+        
+      } else {
+        x = 20;
+        y = 0;
+        width = poolShape.getGraphicsAlgorithm().getWidth() - 20;
+        height = poolShape.getGraphicsAlgorithm().getHeight();
+      }
     }
 
     Lane newLane = new Lane();

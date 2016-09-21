@@ -1,3 +1,16 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.property.ui;
 
 import java.util.ArrayList;
@@ -7,14 +20,9 @@ import org.activiti.bpmn.model.FormProperty;
 import org.activiti.bpmn.model.FormValue;
 import org.activiti.bpmn.model.StartEvent;
 import org.activiti.bpmn.model.UserTask;
-import org.activiti.designer.util.eclipse.ActivitiUiUtil;
-import org.activiti.designer.util.editor.ModelHandler;
+import org.activiti.designer.property.ModelUpdater;
 import org.apache.commons.lang.StringUtils;
-import org.eclipse.emf.ecore.util.EcoreUtil;
-import org.eclipse.emf.transaction.TransactionalEditingDomain;
-import org.eclipse.graphiti.mm.pictograms.Diagram;
 import org.eclipse.graphiti.mm.pictograms.PictogramElement;
-import org.eclipse.graphiti.platform.IDiagramEditor;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.TableItem;
@@ -23,15 +31,15 @@ import org.eclipse.swt.widgets.TableItem;
 public class FormPropertyEditor extends TableFieldEditor {
   
   protected Composite parent;
+  protected ModelUpdater modelUpdater;
   public PictogramElement pictogramElement;
-  public IDiagramEditor diagramEditor;
-  public Diagram diagram;
-	
-  public FormPropertyEditor(String key, Composite parent) {
+
+  public FormPropertyEditor(String key, Composite parent, ModelUpdater modelUpdater) {
     
     super(key, "", new String[] {"Id", "Name", "Type", "Expression", "Variable", "Default", "Pattern", "Required", "Readable", "Writeable", "Form values"},
         new int[] {60, 100, 60, 100, 80, 80, 60, 60, 60, 60, 120}, parent);
     this.parent = parent;
+    this.modelUpdater = modelUpdater;
   }
 
   public void initialize(List<FormProperty> formPropertyList) {
@@ -40,6 +48,11 @@ public class FormPropertyEditor extends TableFieldEditor {
     for (FormProperty formProperty : formPropertyList) {
       addTableItem(formProperty);
     }
+  }
+  
+  @Override
+  protected boolean isTableChangeEnabled() {
+    return false;
   }
 
   @Override
@@ -84,6 +97,7 @@ public class FormPropertyEditor extends TableFieldEditor {
     FormPropertyDialog dialog = new FormPropertyDialog(parent.getShell(), getItems());
     dialog.open();
     if(dialog.id != null && dialog.id.length() > 0) {
+      createNewFormProperty(dialog);
       return new String[] { dialog.id, dialog.name, dialog.type, 
       				dialog.expression, dialog.variable, dialog.defaultExpression, dialog.datePattern,
               dialog.required.toLowerCase(), dialog.readable.toLowerCase(), 
@@ -95,11 +109,13 @@ public class FormPropertyEditor extends TableFieldEditor {
   
   @Override
   protected String[] getChangedInputObject(TableItem item) {
+    int index = table.getSelectionIndex();
     FormPropertyDialog dialog = new FormPropertyDialog(parent.getShell(), getItems(), 
     				item.getText(0), item.getText(1), item.getText(2), item.getText(3), item.getText(4),
             item.getText(5), item.getText(6), item.getText(7), item.getText(8), item.getText(9), item.getText(10));
     dialog.open();
-    if(dialog.id != null && dialog.id.length() > 0) {      
+    if(dialog.id != null && dialog.id.length() > 0) {
+      saveFormProperty(dialog, index);
       return new String[] {dialog.id, dialog.name, dialog.type, 
       				dialog.expression, dialog.variable, dialog.defaultExpression, dialog.datePattern,
               dialog.required.toLowerCase(), dialog.readable.toLowerCase(), 
@@ -111,16 +127,30 @@ public class FormPropertyEditor extends TableFieldEditor {
   
   @Override
   protected void removedItem(int index) {
-	  // TODO Auto-generated method stub 
+    saveRemovedObject(index);
   }
   
   @Override
-  protected void selectionChanged() {
-    super.selectionChanged();
-    saveFormProperties();
+  protected void upPressed() {
+    final int index = table.getSelectionIndex();
+    Object updatableBo = modelUpdater.getProcessModelUpdater().getUpdatableBusinessObject();
+    FormProperty property = getFormProperties(updatableBo).remove(index);
+    getFormProperties(updatableBo).add(index - 1, property);
+    modelUpdater.executeModelUpdater();
+    super.upPressed();
+  }
+
+  @Override
+  protected void downPressed() {
+    final int index = table.getSelectionIndex();
+    Object updatableBo = modelUpdater.getProcessModelUpdater().getUpdatableBusinessObject();
+    FormProperty property = getFormProperties(updatableBo).remove(index);
+    getFormProperties(updatableBo).add(index + 1, property);
+    modelUpdater.executeModelUpdater();
+    super.downPressed();
   }
   
-  private List<FormProperty> getFormProperties(Object bo) {
+  protected List<FormProperty> getFormProperties(Object bo) {
     List<FormProperty> formPropertyList = null;
     if(bo instanceof UserTask) {
       formPropertyList = ((UserTask) bo).getFormProperties();
@@ -130,81 +160,74 @@ public class FormPropertyEditor extends TableFieldEditor {
     return formPropertyList;
   }
   
-  private void setFormProperties(Object bo, List<FormProperty> formPropertyList) {
-    if(bo instanceof UserTask) {
-      ((UserTask) bo).getFormProperties().clear();
-      ((UserTask) bo).getFormProperties().addAll(formPropertyList);
-    } else if(bo instanceof StartEvent) {
-    	((StartEvent) bo).getFormProperties().clear();
-      ((StartEvent) bo).getFormProperties().addAll(formPropertyList);
+  protected void createNewFormProperty(FormPropertyDialog dialog) {
+    if (pictogramElement != null) {
+      Object updatableBo = modelUpdater.getProcessModelUpdater().getUpdatableBusinessObject();
+      
+      FormProperty property = new FormProperty();
+      if(dialog.id != null && dialog.id.length() > 0) {
+        copyValuesToFormProperty(dialog, property);
+        getFormProperties(updatableBo).add(property);
+        modelUpdater.executeModelUpdater();
+      }
     }
   }
   
-  private void saveFormProperties() {
+  protected void saveFormProperty(FormPropertyDialog dialog, int index) {
     if (pictogramElement != null) {
-      final Object bo = ModelHandler.getModel(EcoreUtil.getURI(diagram)).getFeatureProvider().getBusinessObjectForPictogramElement(pictogramElement);
-      if (bo == null) {
-        return;
-      }
-      final List<FormProperty> formPropertyList = getFormProperties(bo);
-      if(formPropertyList == null) return;
+      Object updatableBo = modelUpdater.getProcessModelUpdater().getUpdatableBusinessObject();
       
-      TransactionalEditingDomain editingDomain = diagramEditor.getEditingDomain();
-      ActivitiUiUtil.runModelChange(new Runnable() {
-        public void run() {
-        	List<FormProperty> newFormList = new ArrayList<FormProperty>();
-          for (TableItem item : getItems()) {
-            String id = item.getText(0);
-            String name = item.getText(1);
-            String type = item.getText(2);
-            String expression = item.getText(3);
-            String variable = item.getText(4);
-            String defaultExpression = item.getText(5);
-            String datePattern = item.getText(6);
-            String required = item.getText(7);
-            String readable = item.getText(8);
-            String writeable = item.getText(9);
-            String formValues = item.getText(10);
-            if(id != null && id.length() > 0) {
-              
-              FormProperty newFormProperty = new FormProperty();
-              newFormProperty.setId(id);
-              newFormProperty.setName(name);
-              newFormProperty.setType(type);
-              newFormProperty.setExpression(expression);
-              newFormProperty.setVariable(variable);
-              newFormProperty.setDefaultExpression(defaultExpression);
-              newFormProperty.setDatePattern(datePattern);
-              if(StringUtils.isNotEmpty(required)) {
-                newFormProperty.setRequired(Boolean.valueOf(required.toLowerCase()));
-              }
-              if(StringUtils.isNotEmpty(readable)) {
-                newFormProperty.setReadable(Boolean.valueOf(readable.toLowerCase()));
-              }
-              if(StringUtils.isNotEmpty(writeable)) {
-                newFormProperty.setWriteable(Boolean.valueOf(writeable.toLowerCase()));
-              }
-              
-              List<FormValue> formValueList = new ArrayList<FormValue>();
-              if(formValues != null && formValues.length() > 0) {
-              	String[] formValueArray = formValues.split(";");
-              	if(formValueArray != null) {
-              		for(String formValue : formValueArray) {
-              			FormValue formValueObj = new FormValue();
-              			formValueObj.setId(formValue.substring(0, formValue.lastIndexOf(":")));
-              			formValueObj.setName(formValue.substring(formValue.lastIndexOf(":") + 1));
-              			formValueList.add(formValueObj);
-              		}
-              	}
-              }
-              newFormProperty.getFormValues().addAll(formValueList);
-              
-              newFormList.add(newFormProperty);
-            }
-          }
-          setFormProperties(bo, newFormList);
+      FormProperty property = getFormProperties(updatableBo).get(index);
+      if (property != null) {
+     
+        if(dialog.id != null && dialog.id.length() > 0) {
+          copyValuesToFormProperty(dialog, property);
+          modelUpdater.executeModelUpdater();
         }
-      }, editingDomain, "Model Update");
+      }
     }
+  }
+  
+  protected void saveRemovedObject(int index) {
+    if (pictogramElement != null) {
+      Object updatableBo = modelUpdater.getProcessModelUpdater().getUpdatableBusinessObject();
+      
+      getFormProperties(updatableBo).remove(index);
+      
+      modelUpdater.executeModelUpdater();
+    }
+  }
+  
+  protected void copyValuesToFormProperty(FormPropertyDialog dialog, FormProperty property) {
+    property.setId(dialog.id);
+    property.setName(dialog.name);
+    property.setType(dialog.type);
+    property.setExpression(dialog.expression);
+    property.setVariable(dialog.variable);
+    property.setDefaultExpression(dialog.defaultExpression);
+    property.setDatePattern(dialog.datePattern);
+    if (StringUtils.isNotEmpty(dialog.required)) {
+      property.setRequired(Boolean.valueOf(dialog.required.toLowerCase()));
+    }
+    if (StringUtils.isNotEmpty(dialog.readable)) {
+      property.setReadable(Boolean.valueOf(dialog.readable.toLowerCase()));
+    }
+    if (StringUtils.isNotEmpty(dialog.writeable)) {
+      property.setWriteable(Boolean.valueOf(dialog.writeable.toLowerCase()));
+    }
+    
+    List<FormValue> formValueList = new ArrayList<FormValue>();
+    if (dialog.formValues != null && dialog.formValues.length() > 0) {
+      String[] formValueArray = dialog.formValues.split(";");
+      if(formValueArray != null) {
+        for(String formValue : formValueArray) {
+          FormValue formValueObj = new FormValue();
+          formValueObj.setId(formValue.substring(0, formValue.lastIndexOf(":")));
+          formValueObj.setName(formValue.substring(formValue.lastIndexOf(":") + 1));
+          formValueList.add(formValueObj);
+        }
+      }
+    }
+    property.setFormValues(formValueList);
   }
 }

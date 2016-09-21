@@ -1,18 +1,16 @@
-/*******************************************************************************
- * <copyright>
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Copyright (c) 2005, 2010 SAP AG.
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Contributors:
- *    SAP AG - initial API, implementation and documentation
- *
- * </copyright>
- *
- *******************************************************************************/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.util.style;
 
 import java.util.Collection;
@@ -96,6 +94,21 @@ public class StyleUtil {
 		return style;
 	}
 	
+	public static Style getStyleForMessageFlow(Diagram diagram) {
+    final String styleId = "BPMN-MESSAGE-FLOW-ARROW"; //$NON-NLS-1$
+
+    Style style = findStyle(diagram, styleId);
+
+    if (style == null) { // style not found - create new style
+      IGaService gaService = Graphiti.getGaService();
+      style = gaService.createStyle(diagram, styleId);
+      style.setForeground(gaService.manageColor(diagram, IColorConstant.BLACK));
+      style.setBackground(gaService.manageColor(diagram, IColorConstant.WHITE));
+      style.setLineWidth(1);
+    }
+    return style;
+  }
+	
 	// find the style with a given id in the style-container, can return null
 	private static Style findStyle(StyleContainer styleContainer, String id) {
 		// find and return style
@@ -172,7 +185,7 @@ public class StyleUtil {
     return agca;
   }
 	
-	protected static void addGradientColoredArea(EList<GradientColoredArea> gcas, String colorStart, int locationValueStart,
+	public static void addGradientColoredArea(EList<GradientColoredArea> gcas, String colorStart, int locationValueStart,
 	        LocationType locationTypeStart, String colorEnd, int locationValueEnd, LocationType locationTypeEnd
 	        , Diagram diagram) {
     final GradientColoredArea gca = StylesFactory.eINSTANCE.createGradientColoredArea();
@@ -185,11 +198,6 @@ public class StyleUtil {
                           , ColorUtil.getGreenFromHex(colorStart)
                           , ColorUtil.getBlueFromHex(colorStart));
     gca.getStart().setColor(startColor);
-    
-//    gca.getStart().setColor(StylesFactory.eINSTANCE.createColor());
-//    gca.getStart().getColor().setBlue(ColorUtil.getBlueFromHex(colorStart));
-//    gca.getStart().getColor().setGreen(ColorUtil.getGreenFromHex(colorStart));
-//    gca.getStart().getColor().setRed(ColorUtil.getRedFromHex(colorStart));
     gca.getStart().setLocationType(locationTypeStart);
     gca.getStart().setLocationValue(locationValueStart);
     gca.setEnd(StylesFactory.eINSTANCE.createGradientColoredLocation());

@@ -1,6 +1,21 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.features;
 
 import org.activiti.bpmn.model.TextAnnotation;
+import org.activiti.designer.eclipse.common.ActivitiPlugin;
+import org.activiti.designer.util.bpmn.BpmnExtensionUtil;
 import org.eclipse.graphiti.features.IFeatureProvider;
 import org.eclipse.graphiti.features.IReason;
 import org.eclipse.graphiti.features.context.IUpdateContext;
@@ -45,7 +60,7 @@ public class UpdateTextAnnotationFeature extends AbstractUpdateFeature {
 		final Object bo = getBusinessObjectForPictogramElement(pictogramElement);
 		if (bo instanceof TextAnnotation) {
 			final TextAnnotation ta = (TextAnnotation) bo;
-			businessText = ta.getText();
+			businessText = BpmnExtensionUtil.getTextAnnotationText(ta, ActivitiPlugin.getDefault());
 		}
 		
 		if (pictogramText == null && businessText != null 
@@ -65,7 +80,7 @@ public class UpdateTextAnnotationFeature extends AbstractUpdateFeature {
 		final Object bo = getBusinessObjectForPictogramElement(pe);
 		if (bo instanceof TextAnnotation) {
 			final TextAnnotation ta = (TextAnnotation) bo;
-			businessText = ta.getText();
+			businessText = BpmnExtensionUtil.getTextAnnotationText(ta, ActivitiPlugin.getDefault());
 		}
 		
 		if (pe instanceof ContainerShape) {

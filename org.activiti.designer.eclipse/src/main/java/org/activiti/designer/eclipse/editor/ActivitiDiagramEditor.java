@@ -1,3 +1,16 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.activiti.designer.eclipse.editor;
 
 import java.awt.Point;
@@ -5,7 +18,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -22,24 +38,39 @@ import org.activiti.bpmn.model.BaseElement;
 import org.activiti.bpmn.model.BoundaryEvent;
 import org.activiti.bpmn.model.BpmnModel;
 import org.activiti.bpmn.model.CustomProperty;
+import org.activiti.bpmn.model.DataObject;
+import org.activiti.bpmn.model.ExtensionAttribute;
+import org.activiti.bpmn.model.ExtensionElement;
 import org.activiti.bpmn.model.FieldExtension;
 import org.activiti.bpmn.model.FlowElement;
+import org.activiti.bpmn.model.FlowElementsContainer;
 import org.activiti.bpmn.model.GraphicInfo;
 import org.activiti.bpmn.model.Lane;
+import org.activiti.bpmn.model.MessageFlow;
 import org.activiti.bpmn.model.Pool;
 import org.activiti.bpmn.model.Process;
 import org.activiti.bpmn.model.SequenceFlow;
 import org.activiti.bpmn.model.ServiceTask;
 import org.activiti.bpmn.model.SubProcess;
-import org.activiti.designer.eclipse.preferences.PreferencesUtil;
-import org.activiti.designer.eclipse.ui.ActivitiEditorContextMenuProvider;
+import org.activiti.bpmn.model.UserTask;
+import org.activiti.designer.eclipse.common.ActivitiPlugin;
+import org.activiti.designer.eclipse.extension.export.ExportMarshaller;
+import org.activiti.designer.eclipse.ui.ExportMarshallerRunnable;
+import org.activiti.designer.eclipse.util.ExtensionPointUtil;
 import org.activiti.designer.eclipse.util.FileService;
+import org.activiti.designer.integration.annotation.Property;
 import org.activiti.designer.integration.servicetask.CustomServiceTask;
+import org.activiti.designer.integration.usertask.CustomUserTask;
+import org.activiti.designer.util.bpmn.BpmnExtensions;
 import org.activiti.designer.util.eclipse.ActivitiUiUtil;
-import org.activiti.designer.util.editor.Bpmn2MemoryModel;
+import org.activiti.designer.util.editor.BpmnMemoryModel;
 import org.activiti.designer.util.editor.ModelHandler;
 import org.activiti.designer.util.extension.ExtensionUtil;
 import org.activiti.designer.util.preferences.Preferences;
+import org.activiti.designer.util.preferences.PreferencesUtil;
+import org.activiti.image.ProcessDiagramGenerator;
+import org.activiti.image.impl.DefaultProcessDiagramGenerator;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IFolder;
@@ -55,7 +86,6 @@ import org.eclipse.emf.common.util.EList;
 import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.emf.transaction.RecordingCommand;
 import org.eclipse.emf.transaction.TransactionalEditingDomain;
-import org.eclipse.gef.ContextMenuProvider;
 import org.eclipse.gef.GraphicalViewer;
 import org.eclipse.gef.LayerConstants;
 import org.eclipse.gef.editparts.LayerManager;
@@ -79,28 +109,21 @@ import org.eclipse.swt.graphics.ImageData;
 import org.eclipse.swt.graphics.ImageLoader;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorSite;
 import org.eclipse.ui.PartInitException;
+import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.progress.IProgressService;
 
 public class ActivitiDiagramEditor extends DiagramEditor {
 
   private static GraphicalViewer activeGraphicalViewer;
 
-  private ActivitiBpmnModelChangeListener activitiBpmnModelChangeListener;
-
   private TransactionalEditingDomain transactionalEditingDomain;
 
   public ActivitiDiagramEditor() {
     super();
-  }
-
-  @Override
-  protected void registerBusinessObjectsListener() {
-    activitiBpmnModelChangeListener = new ActivitiBpmnModelChangeListener(this);
-
-    final TransactionalEditingDomain ted = getEditingDomain();
-    ted.addResourceSetListener(activitiBpmnModelChangeListener);
   }
 
   @Override
@@ -159,27 +182,20 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     try {
       final IFile dataFile = adei.getDataFile();
       final String diagramFileString = dataFile.getLocationURI().getPath();
+      BpmnMemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagramTypeProvider().getDiagram()));
 
-      boolean saveImage = PreferencesUtil.getBooleanPreference(Preferences.SAVE_IMAGE);
-      Bpmn2MemoryModel model = ModelHandler.getModel(EcoreUtil.getURI(getDiagramTypeProvider().getDiagram()));
+      // Save the bpmn diagram file
+      doSaveToBpmn(model, diagramFileString);
 
-      // add sequence flow bend-points to the model
-      final IFeatureProvider featureProvider = getDiagramTypeProvider().getFeatureProvider();
-      new GraphitiToBpmnDI(model, featureProvider).processGraphitiElements();
+      // Save an image of the diagram
+      doSaveImage(diagramFileString, model);
 
-      BpmnXMLConverter converter = new BpmnXMLConverter();
-      byte[] xmlBytes = converter.convertToXML(model.getBpmnModel());
-
-      File objectsFile = new File(diagramFileString);
-      FileOutputStream fos = new FileOutputStream(objectsFile);
-      fos.write(xmlBytes);
-      fos.close();
-
-      if (saveImage) {
-        marshallImage(model, diagramFileString);
-      }
-
+      // Refresh the resources in the workspace before invoking export
+      // marshallers, as they may need access to resources
       dataFile.getProject().refreshLocal(IResource.DEPTH_INFINITE, null);
+
+      // Invoke export marshallers to produce additional output
+      doInvokeExportMarshallers(model);
 
     } catch (Exception e) {
       // TODO Auto-generated catch block
@@ -190,7 +206,104 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     updateDirtyState();
   }
 
-  private void marshallImage(Bpmn2MemoryModel model, String modelFileName) {
+  protected void doSaveToBpmn(final BpmnMemoryModel model, final String diagramFileString) throws Exception {
+
+    // add sequence flow bend-points to the model
+    final IFeatureProvider featureProvider = getDiagramTypeProvider().getFeatureProvider();
+    new GraphitiToBpmnDI(model, featureProvider).processGraphitiElements();
+
+    BpmnXMLConverter converter = new BpmnXMLConverter();
+    byte[] xmlBytes = converter.convertToXML(model.getBpmnModel());
+
+    File objectsFile = new File(diagramFileString);
+    try {
+      FileOutputStream fos = new FileOutputStream(objectsFile);
+      fos.write(xmlBytes);
+      fos.close();
+    } catch (Exception e) {
+      MessageBox messageBox = new MessageBox(Display.getCurrent().getActiveShell(), SWT.ICON_WARNING | SWT.OK);
+      messageBox.setText("Warning");
+      messageBox.setMessage("Error while saving the model " + e.getLocalizedMessage());
+      messageBox.open();
+    }
+
+  }
+
+  private void doSaveImage(final String diagramFileString, BpmnMemoryModel model) {
+    boolean saveImage = PreferencesUtil.getBooleanPreference(Preferences.SAVE_IMAGE, ActivitiPlugin.getDefault());
+    if (saveImage) {
+      List<String> languages = PreferencesUtil.getStringArray(Preferences.ACTIVITI_LANGUAGES, ActivitiPlugin.getDefault());
+      if (languages != null && languages.size() > 0) {
+        
+        for (String language : languages) {
+          for (Process process : model.getBpmnModel().getProcesses()) {
+            fillContainerWithLanguage(process, language);
+          }
+          
+          ProcessDiagramGenerator processDiagramGenerator = new DefaultProcessDiagramGenerator();
+          InputStream imageStream = processDiagramGenerator.generatePngDiagram(model.getBpmnModel());
+          
+          if (imageStream != null) {
+            String imageFileName = null;
+            if (diagramFileString.endsWith(".bpmn20.xml")) {
+              imageFileName = diagramFileString.substring(0, diagramFileString.length() - 11) + 
+                  "_" + language + ".png";
+            } else {
+              imageFileName = diagramFileString.substring(0, diagramFileString.lastIndexOf(".")) + 
+                  "_" + language + ".png";
+            }
+            File imageFile = new File(imageFileName);
+            FileOutputStream outStream = null;
+            ByteArrayOutputStream baos = null;
+            try {
+              outStream = new FileOutputStream(imageFile);
+              baos = new ByteArrayOutputStream();
+              IOUtils.copy(imageStream, baos);
+              baos.writeTo(outStream);
+              
+            } catch (Exception e) {
+              e.printStackTrace();
+            } finally {
+              if (outStream != null) {
+                IOUtils.closeQuietly(outStream);
+              }
+              if (baos != null) {
+                IOUtils.closeQuietly(baos);
+              }
+            }
+          }
+        }
+ 
+      } else {
+        marshallImage(model, diagramFileString);
+      }
+    }
+  }
+  
+  protected void fillContainerWithLanguage(FlowElementsContainer container, String language) {
+    for (FlowElement flowElement : container.getFlowElements()) {
+      
+      List<ExtensionElement> languageElements = flowElement.getExtensionElements().get(BpmnExtensions.LANGUAGE_EXTENSION);
+      
+      if (languageElements != null && languageElements.size() > 0) {
+        for (ExtensionElement extensionElement : languageElements) {
+          List<ExtensionAttribute> languageAttributes = extensionElement.getAttributes().get("language");
+          if (languageAttributes != null && languageAttributes.size() == 1) {
+            String languageValue = languageAttributes.get(0).getValue();
+            if (language.equals(languageValue)) {
+              flowElement.setName(extensionElement.getElementText());
+            }
+          }
+        }
+      }
+      
+      if (flowElement instanceof SubProcess) {
+        fillContainerWithLanguage((SubProcess) flowElement, language);
+      }
+    }
+  }
+
+  private void marshallImage(BpmnMemoryModel model, String modelFileName) {
     try {
       final GraphicalViewer graphicalViewer = (GraphicalViewer) ((DiagramEditor) model.getFeatureProvider().getDiagramTypeProvider().getDiagramEditor())
               .getAdapter(GraphicalViewer.class);
@@ -209,6 +322,10 @@ public class ActivitiDiagramEditor extends DiagramEditor {
 
       final Image img = new Image(display, rootFigureBounds.width, rootFigureBounds.height);
       final GC imageGC = new GC(img);
+
+      // Add overlay
+      addOverlay(imageGC, modelFileName, model);
+
       final SWTGraphics grap = new SWTGraphics(imageGC);
 
       // Access UI thread from runnable to print the canvas to the image
@@ -263,6 +380,20 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     }
   }
 
+  public void addOverlay(final GC imageGC, String modelFileName, BpmnMemoryModel model) {
+    if (PreferencesUtil.getBooleanPreference(Preferences.SAVE_IMAGE_ADD_OVERLAY, ActivitiPlugin.getDefault())) {
+      final ImageOverlayCreator creator = new ImageOverlayCreator(imageGC);
+      creator.addOverlay(modelFileName, model);
+    }
+  }
+
+  private void doInvokeExportMarshallers(final BpmnMemoryModel model) throws InvocationTargetException, InterruptedException {
+    final Collection<ExportMarshaller> marshallers = ExtensionPointUtil.getExportMarshallers();
+    final ExportMarshallerRunnable runnable = new ExportMarshallerRunnable(model, marshallers);
+    final IProgressService progressService = PlatformUI.getWorkbench().getProgressService();
+    progressService.busyCursorWhile(runnable);
+  }
+
   @Override
   public boolean isDirty() {
     TransactionalEditingDomain editingDomain = getEditingDomain();
@@ -280,7 +411,7 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     final ActivitiDiagramEditorInput adei = (ActivitiDiagramEditorInput) input;
     final IFile dataFile = adei.getDataFile();
 
-    final Bpmn2MemoryModel model = new Bpmn2MemoryModel(getDiagramTypeProvider().getFeatureProvider(), dataFile);
+    final BpmnMemoryModel model = new BpmnMemoryModel(getDiagramTypeProvider().getFeatureProvider(), dataFile);
     ModelHandler.addModel(EcoreUtil.getURI(getDiagramTypeProvider().getDiagram()), model);
 
     String filePath = dataFile.getLocationURI().getPath();
@@ -297,9 +428,14 @@ public class ActivitiDiagramEditor extends DiagramEditor {
         InputStreamReader in = new InputStreamReader(fileStream, "UTF-8");
         XMLStreamReader xtr = xif.createXMLStreamReader(in);
         BpmnXMLConverter bpmnConverter = new BpmnXMLConverter();
-        bpmnConverter.setUserTaskFormTypes(PreferencesUtil.getStringArray(Preferences.ALFRESCO_FORMTYPES_USERTASK));
-        bpmnConverter.setStartEventFormTypes(PreferencesUtil.getStringArray(Preferences.ALFRESCO_FORMTYPES_STARTEVENT));
-        BpmnModel bpmnModel = bpmnConverter.convertToBpmnModel(xtr);
+        bpmnConverter.setUserTaskFormTypes(PreferencesUtil.getStringArray(Preferences.ALFRESCO_FORMTYPES_USERTASK, ActivitiPlugin.getDefault()));
+        bpmnConverter.setStartEventFormTypes(PreferencesUtil.getStringArray(Preferences.ALFRESCO_FORMTYPES_STARTEVENT, ActivitiPlugin.getDefault()));
+        BpmnModel bpmnModel = null;
+        try {
+          bpmnModel = bpmnConverter.convertToBpmnModel(xtr);
+        } catch (Exception e) {
+          bpmnModel = new BpmnModel();
+        }
         model.setBpmnModel(bpmnModel);
 
         if (bpmnModel.getLocationMap().size() == 0) {
@@ -328,7 +464,7 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     }
   }
 
-  private void importDiagram(final Bpmn2MemoryModel model) {
+  private void importDiagram(final BpmnMemoryModel model) {
     final Diagram diagram = getDiagramTypeProvider().getDiagram();
     diagram.setActive(true);
 
@@ -336,31 +472,76 @@ public class ActivitiDiagramEditor extends DiagramEditor {
 
       @Override
       protected void doExecute() {
-
         if (model.getBpmnModel().getPools().size() > 0) {
           for (Pool pool : model.getBpmnModel().getPools()) {
-            PictogramElement poolElement = addContainerElement(pool, model, diagram);
-            if (poolElement == null) {
-              continue;
+            GraphicInfo graphicInfo = model.getBpmnModel().getGraphicInfo(pool.getId());
+
+            // if no graphic info is present we can try to calculate it from the
+            // lane DI info
+            if (graphicInfo == null && StringUtils.isNotEmpty(pool.getProcessRef())) {
+              Process process = model.getBpmnModel().getProcess(pool.getId());
+
+              if (process != null && process.getLanes().size() > 0) {
+                Double minX = null, minY = null, width = null, height = null;
+                for (Lane lane : process.getLanes()) {
+                  GraphicInfo laneInfo = model.getBpmnModel().getGraphicInfo(lane.getId());
+                  if (laneInfo != null) {
+                    if (minX == null || laneInfo.getX() < minX) {
+                      minX = laneInfo.getX();
+                    }
+                    if (minY == null || laneInfo.getY() < minY) {
+                      minY = laneInfo.getY();
+                    }
+
+                    if (width == null || laneInfo.getWidth() > width) {
+                      width = laneInfo.getWidth();
+                    }
+                    if (height == null) {
+                      height = laneInfo.getHeight();
+                    } else {
+                      height += laneInfo.getHeight();
+                    }
+                  }
+                }
+
+                if (width != null && width > 0) {
+                  graphicInfo = new GraphicInfo();
+                  graphicInfo.setX(minX);
+                  graphicInfo.setY(minY);
+                  graphicInfo.setWidth(width);
+                  graphicInfo.setHeight(height);
+                  model.getBpmnModel().addGraphicInfo(pool.getId(), graphicInfo);
+                }
+              }
             }
 
-            Process process = model.getBpmnModel().getProcess(pool.getId());
-            for (Lane lane : process.getLanes()) {
-              addContainerElement(lane, model, (ContainerShape) poolElement);
+            if (graphicInfo != null) {
+              PictogramElement poolElement = addContainerElement(pool, model, diagram);
+              if (poolElement == null) {
+                continue;
+              }
+
+              Process process = model.getBpmnModel().getProcess(pool.getId());
+              if (process != null) {
+                for (Lane lane : process.getLanes()) {
+                  addContainerElement(lane, model, (ContainerShape) poolElement);
+                }
+              }
             }
           }
         }
-
+        
         for (Process process : model.getBpmnModel().getProcesses()) {
           drawFlowElements(process.getFlowElements(), model.getBpmnModel().getLocationMap(), diagram, process);
-          drawArtifacts(process.getArtifacts(), model.getBpmnModel().getLocationMap(), diagram, process);
+          drawArtifacts(process, model.getBpmnModel().getLocationMap(), diagram, process);
         }
         drawAllFlows(model);
+        drawMessageFlows(model.getBpmnModel().getMessageFlows().values(), model);
       }
     });
   }
 
-  private PictogramElement addContainerElement(BaseElement element, Bpmn2MemoryModel model, ContainerShape parent) {
+  private PictogramElement addContainerElement(BaseElement element, BpmnMemoryModel model, ContainerShape parent) {
     GraphicInfo graphicInfo = model.getBpmnModel().getGraphicInfo(element.getId());
     if (graphicInfo == null) {
       return null;
@@ -393,7 +574,8 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     return pictElement;
   }
 
-  private void drawFlowElements(Collection<FlowElement> elementList, Map<String, GraphicInfo> locationMap, ContainerShape parentShape, Process process) {
+  @SuppressWarnings({ "rawtypes", "unchecked" })
+  protected void drawFlowElements(Collection<FlowElement> elementList, Map<String, GraphicInfo> locationMap, ContainerShape parentShape, Process process) {
 
     final IFeatureProvider featureProvider = getDiagramTypeProvider().getFeatureProvider();
 
@@ -421,7 +603,6 @@ public class ActivitiDiagramEditor extends DiagramEditor {
 
         context.setNewObject(flowElement);
         context.setSize((int) graphicInfo.getWidth(), (int) graphicInfo.getHeight());
-
         ContainerShape parentContainer = null;
         if (parentShape instanceof Diagram) {
           parentContainer = getParentContainer(flowElement.getId(), process, (Diagram) parentShape);
@@ -461,7 +642,55 @@ public class ActivitiDiagramEditor extends DiagramEditor {
               serviceTask.getFieldExtensions().clear();
             }
           }
+          
+        } else if (flowElement instanceof UserTask) {
 
+          UserTask userTask = (UserTask) flowElement;
+
+          if (userTask.isExtended()) {
+
+            CustomUserTask targetTask = findCustomUserTask(userTask);
+
+            if (targetTask != null) {
+              
+              final List<Class<CustomUserTask>> classHierarchy = new ArrayList<Class<CustomUserTask>>();
+              final List<String> fieldInfoObjects = new ArrayList<String>();
+
+              Class clazz = targetTask.getClass();
+              classHierarchy.add(clazz);
+
+              boolean hierarchyOpen = true;
+              while (hierarchyOpen) {
+                clazz = clazz.getSuperclass();
+                if (CustomUserTask.class.isAssignableFrom(clazz)) {
+                  classHierarchy.add(clazz);
+                } else {
+                  hierarchyOpen = false;
+                }
+              }
+              
+              for (final Class<CustomUserTask> currentClass : classHierarchy) {
+                for (final Field field : currentClass.getDeclaredFields()) {
+                  if (field.isAnnotationPresent(Property.class)) {
+                    fieldInfoObjects.add(field.getName());
+                  }
+                }
+              }
+              
+              for (String fieldName : userTask.getExtensionElements().keySet()) {
+                if (fieldInfoObjects.contains(fieldName)) {
+                  CustomProperty customFieldProperty = new CustomProperty();
+                  customFieldProperty.setName(fieldName);
+                  customFieldProperty.setSimpleValue(userTask.getExtensionElements().get(fieldName).get(0).getElementText());
+                  userTask.getCustomProperties().add(customFieldProperty);
+                }
+              }
+              
+              for (String fieldName : fieldInfoObjects) {
+                userTask.getExtensionElements().remove(fieldName);
+              }
+            }
+          }
         }
 
         if (flowElement instanceof BoundaryEvent) {
@@ -476,8 +705,7 @@ public class ActivitiDiagramEditor extends DiagramEditor {
               boundaryContext.setLocation((int) graphicInfo.getX() - location.x, (int) graphicInfo.getY() - location.y);
 
               if (addFeature.canAdd(boundaryContext)) {
-                PictogramElement newBoundaryContainer = addFeature.add(boundaryContext);
-                featureProvider.link(newBoundaryContainer, new Object[] { boundaryEvent });
+                addFeature.add(boundaryContext);
               }
             }
           }
@@ -496,17 +724,20 @@ public class ActivitiDiagramEditor extends DiagramEditor {
       if (flowElement instanceof BoundaryEvent) {
         ((BoundaryEvent) flowElement).getAttachedToRef().getBoundaryEvents().remove(flowElement);
       } else {
-        elementList.remove(flowElement);
+    	  // do not remove Data Objects
+    	  if (flowElement instanceof DataObject == false) {
+    		  elementList.remove(flowElement);
+    	  }
       }
     }
   }
 
-  private CustomServiceTask findCustomServiceTask(ServiceTask serviceTask) {
+  protected CustomServiceTask findCustomServiceTask(ServiceTask serviceTask) {
     CustomServiceTask result = null;
     if (serviceTask.isExtended()) {
 
-      final List<CustomServiceTask> customServiceTasks = ExtensionUtil.getCustomServiceTasks(ActivitiUiUtil.getProjectFromDiagram(getDiagramTypeProvider()
-              .getDiagram()));
+      final List<CustomServiceTask> customServiceTasks = ExtensionUtil.getCustomServiceTasks(
+          ActivitiUiUtil.getProjectFromDiagram(getDiagramTypeProvider().getDiagram()));
 
       for (final CustomServiceTask customServiceTask : customServiceTasks) {
         if (serviceTask.getExtensionId().equals(customServiceTask.getId())) {
@@ -517,8 +748,25 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     }
     return result;
   }
+  
+  protected CustomUserTask findCustomUserTask(UserTask userTask) {
+    CustomUserTask result = null;
+    if (userTask.isExtended()) {
 
-  private ContainerShape getParentContainer(String flowElementId, Process process, Diagram diagram) {
+      final List<CustomUserTask> customUserTasks = ExtensionUtil.getCustomUserTasks(
+          ActivitiUiUtil.getProjectFromDiagram(getDiagramTypeProvider().getDiagram()));
+
+      for (final CustomUserTask customUserTask : customUserTasks) {
+        if (userTask.getExtensionId().equals(customUserTask.getId())) {
+          result = customUserTask;
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
+  protected ContainerShape getParentContainer(String flowElementId, Process process, Diagram diagram) {
     Lane foundLane = null;
     for (Lane lane : process.getLanes()) {
       if (lane.getFlowReferences().contains(flowElementId)) {
@@ -526,7 +774,7 @@ public class ActivitiDiagramEditor extends DiagramEditor {
         break;
       }
     }
-
+    
     if (foundLane != null) {
       final IFeatureProvider featureProvider = getDiagramTypeProvider().getFeatureProvider();
       return (ContainerShape) featureProvider.getPictogramElementForBusinessObject(foundLane);
@@ -535,22 +783,77 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     }
   }
 
-  private Point getLocation(ContainerShape containerShape) {
+  protected Point getLocation(ContainerShape containerShape) {
     if (containerShape instanceof Diagram == true) {
       return new Point(containerShape.getGraphicsAlgorithm().getX(), containerShape.getGraphicsAlgorithm().getY());
     }
-
+    
     Point location = getLocation(containerShape.getContainer());
     return new Point(location.x + containerShape.getGraphicsAlgorithm().getX(), location.y + containerShape.getGraphicsAlgorithm().getY());
   }
+  
+  protected void drawMessageFlows(final Collection<MessageFlow> messageFlows, final BpmnMemoryModel model) {
 
-  private void drawArtifacts(final Collection<Artifact> artifacts, final Map<String, GraphicInfo> locationMap, final ContainerShape parent,
-          final Process process) {
+    for (final MessageFlow messageFlow : messageFlows) {
+    
+      Anchor sourceAnchor = null;
+      Anchor targetAnchor = null;
+      ContainerShape sourceShape = (ContainerShape) getDiagramTypeProvider().getFeatureProvider().getPictogramElementForBusinessObject(
+              model.getFlowElement(messageFlow.getSourceRef()));
+      
+      if (sourceShape == null) {
+        continue;
+      }
+
+      EList<Anchor> anchorList = sourceShape.getAnchors();
+      for (Anchor anchor : anchorList) {
+        if (anchor instanceof ChopboxAnchor) {
+          sourceAnchor = anchor;
+          break;
+        }
+      }
+
+      ContainerShape targetShape = (ContainerShape) getDiagramTypeProvider().getFeatureProvider().getPictogramElementForBusinessObject(
+              model.getFlowElement(messageFlow.getTargetRef()));
+      
+      if (targetShape == null) {
+        continue;
+      }
+
+      anchorList = targetShape.getAnchors();
+      for (Anchor anchor : anchorList) {
+        if (anchor instanceof ChopboxAnchor) {
+          targetAnchor = anchor;
+          break;
+        }
+      }
+
+      AddConnectionContext addContext = new AddConnectionContext(sourceAnchor, targetAnchor);
+
+      List<GraphicInfo> bendpointList = new ArrayList<GraphicInfo>();
+      if (model.getBpmnModel().getFlowLocationMap().containsKey(messageFlow.getId())) {
+        List<GraphicInfo> pointList = model.getBpmnModel().getFlowLocationGraphicInfo(messageFlow.getId());
+        if (pointList.size() > 2) {
+          for (int i = 1; i < pointList.size() - 1; i++) {
+            bendpointList.add(pointList.get(i));
+          }
+        }
+      }
+      addContext.putProperty("org.activiti.designer.bendpoints", bendpointList);
+      addContext.putProperty("org.activiti.designer.connectionlabel", model.getBpmnModel().getLabelGraphicInfo(messageFlow.getId()));
+
+      addContext.setNewObject(messageFlow);
+      getDiagramTypeProvider().getFeatureProvider().addIfPossible(addContext);
+    }
+  }
+
+  protected void drawArtifacts(final FlowElementsContainer container, final Map<String, GraphicInfo> locationMap, 
+      final ContainerShape parent, final Process process) {
 
     final IFeatureProvider featureProvider = getDiagramTypeProvider().getFeatureProvider();
 
     final List<Artifact> artifactsWithoutDI = new ArrayList<Artifact>();
-    for (final Artifact artifact : artifacts) {
+    for (final Artifact artifact : container.getArtifacts()) {
 
       if (artifact instanceof Association) {
         continue;
@@ -573,7 +876,25 @@ public class ActivitiDiagramEditor extends DiagramEditor {
 
         ContainerShape parentContainer = null;
         if (parent instanceof Diagram) {
-          parentContainer = getParentContainer(artifact.getId(), process, (Diagram) parent);
+          FlowElement connectingElement = null;
+          for (final Artifact associationArtifact : container.getArtifacts()) {
+            if (associationArtifact instanceof Association) {
+              Association association = (Association) associationArtifact;
+              
+              if (association.getSourceRef().equals(artifact.getId())) {
+                connectingElement = container.getFlowElement(association.getTargetRef());
+                
+              } else if (association.getTargetRef().equals(artifact.getId())) {
+                connectingElement = container.getFlowElement(association.getSourceRef());
+              }
+            }
+          }
+          
+          if (connectingElement != null) {
+            parentContainer = getParentContainer(connectingElement.getId(), process, (Diagram) parent);
+          } else {
+            parentContainer = parent;
+          }
         } else {
           parentContainer = parent;
         }
@@ -595,11 +916,18 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     }
 
     for (final Artifact artifact : artifactsWithoutDI) {
-      artifacts.remove(artifact);
+      container.getArtifacts().remove(artifact);
+    }
+    
+    for (FlowElement flowElement : container.getFlowElements()) {
+      if (flowElement instanceof SubProcess) {
+        ContainerShape subProcessShape = (ContainerShape) featureProvider.getPictogramElementForBusinessObject(flowElement);
+        drawArtifacts((SubProcess) flowElement, locationMap, subProcessShape, process);
+      }
     }
   }
 
-  private void drawAllFlows(Bpmn2MemoryModel model) {
+  protected void drawAllFlows(BpmnMemoryModel model) {
     BpmnModel bpmnModel = model.getBpmnModel();
 
     for (Process process : bpmnModel.getProcesses()) {
@@ -608,7 +936,7 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     }
   }
 
-  private void drawSequenceFlowsInList(Collection<FlowElement> flowList, Bpmn2MemoryModel model) {
+  protected void drawSequenceFlowsInList(Collection<FlowElement> flowList, BpmnMemoryModel model) {
     for (FlowElement flowElement : flowList) {
 
       if (flowElement instanceof SubProcess) {
@@ -624,7 +952,7 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     }
   }
 
-  private void drawSequenceFlow(SequenceFlow sequenceFlow, Bpmn2MemoryModel model) {
+  protected void drawSequenceFlow(SequenceFlow sequenceFlow, BpmnMemoryModel model) {
     Anchor sourceAnchor = null;
     Anchor targetAnchor = null;
     ContainerShape sourceShape = (ContainerShape) getDiagramTypeProvider().getFeatureProvider().getPictogramElementForBusinessObject(
@@ -675,7 +1003,7 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     getDiagramTypeProvider().getFeatureProvider().addIfPossible(addContext);
   }
 
-  private void drawAssociationsInList(Collection<Artifact> artifactList, Bpmn2MemoryModel model) {
+  protected void drawAssociationsInList(Collection<Artifact> artifactList, BpmnMemoryModel model) {
     for (Artifact artifact : artifactList) {
 
       if (artifact instanceof Association == false) {
@@ -687,8 +1015,7 @@ public class ActivitiDiagramEditor extends DiagramEditor {
     }
   }
 
-  private void drawAssociation(Association association, Bpmn2MemoryModel model) {
-
+  protected void drawAssociation(Association association, BpmnMemoryModel model) {
     Anchor sourceAnchor = null;
     Anchor targetAnchor = null;
     BaseElement sourceElement = model.getFlowElement(association.getSourceRef());
@@ -760,12 +1087,6 @@ public class ActivitiDiagramEditor extends DiagramEditor {
       IFigure gridFigure = ((LayerManager) rootEditPart).getLayer(LayerConstants.GRID_LAYER);
       gridFigure.setVisible(false);
     }
-    // setPartName("MyDiagram2");
-  }
-
-  @Override
-  protected ContextMenuProvider createContextMenuProvider() {
-    return new ActivitiEditorContextMenuProvider(getGraphicalViewer(), getActionRegistry(), getDiagramTypeProvider());
   }
 
   public static GraphicalViewer getActiveGraphicalViewer() {

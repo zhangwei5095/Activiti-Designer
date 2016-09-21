@@ -1,4 +1,17 @@
 /**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
  * 
  */
 package org.activiti.designer.util.extension;
@@ -13,16 +26,23 @@ import java.util.jar.Manifest;
 
 import org.activiti.bpmn.model.CustomProperty;
 import org.activiti.bpmn.model.ServiceTask;
+import org.activiti.bpmn.model.Task;
+import org.activiti.bpmn.model.UserTask;
 import org.activiti.designer.integration.palette.AbstractDefaultPaletteCustomizer;
 import org.activiti.designer.integration.palette.DefaultPaletteCustomizer;
 import org.activiti.designer.integration.palette.PaletteEntry;
 import org.activiti.designer.integration.servicetask.AbstractCustomServiceTask;
 import org.activiti.designer.integration.servicetask.CustomServiceTask;
 import org.activiti.designer.integration.servicetask.CustomServiceTaskDescriptor;
+import org.activiti.designer.integration.usertask.AbstractCustomUserTask;
+import org.activiti.designer.integration.usertask.CustomUserTask;
+import org.activiti.designer.integration.usertask.CustomUserTaskDescriptor;
 import org.activiti.designer.util.eclipse.ActivitiUiUtil;
 import org.activiti.designer.util.eclipse.ExtensionConstants;
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IWorkspaceRoot;
+import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.graphiti.ui.editor.DiagramEditor;
@@ -58,17 +78,25 @@ public final class ExtensionUtil {
   public static final String DESIGNER_EXTENSIONS_USER_LIB_PATH = "org.eclipse.jdt.USER_LIBRARY/" + USER_LIBRARY_NAME_EXTENSIONS;
 
   public static List<CustomServiceTaskDescriptor> providedCustomServiceTaskDescriptors;
-
-  private static final List<String> FLAGS = new ArrayList<String>();
-
+  
+  public static List<CustomUserTaskDescriptor> providedCustomUserTaskDescriptors;
+  
   private ExtensionUtil() {
 
   }
 
   public static void addProvidedCustomServiceTaskDescriptors(List<CustomServiceTaskDescriptor> descriptors) {
-    if (providedCustomServiceTaskDescriptors == null)
+    if (providedCustomServiceTaskDescriptors == null) {
       providedCustomServiceTaskDescriptors = new ArrayList<CustomServiceTaskDescriptor>();
+    }
     providedCustomServiceTaskDescriptors.addAll(descriptors);
+  }
+  
+  public static void addProvidedCustomUserTaskDescriptors(List<CustomUserTaskDescriptor> descriptors) {
+    if (providedCustomUserTaskDescriptors == null) {
+      providedCustomUserTaskDescriptors = new ArrayList<CustomUserTaskDescriptor>();
+    }
+    providedCustomUserTaskDescriptors.addAll(descriptors);
   }
 
   public static final Set<PaletteEntry> getDisabledPaletteEntries(IProject project) {
@@ -105,24 +133,27 @@ public final class ExtensionUtil {
             // Only check entries of the correct kind
             if (classpathEntry.getEntryKind() == 1 && classpathEntry.getContentKind() == 2) {
 
-              final IPackageFragmentRoot packageFragmentRoot = javaProject.getPackageFragmentRoot(classpathEntry.getPath().toString());
+              IPackageFragment[] fragments = javaProject.getPackageFragments();
+              for (IPackageFragment iPackageFragment : fragments) {
+                
+                if (classpathEntry.getPath().lastSegment().equalsIgnoreCase(iPackageFragment.getParent().getElementName())) {
+                  
+                  IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+                  
+                  String classPathFilename = null;
+                  if (classpathEntry.getPath().toFile().exists()) {
+                    classPathFilename = classpathEntry.getPath().toPortableString();
+                  } else {
+                    classPathFilename = root.getLocation().toPortableString() + classpathEntry.getPath().toPortableString();
+                  }
+                  
+                  JarClassLoader cl = new JarClassLoader(classPathFilename);
 
-              // Create a JarClassLoader to load any classes we
-              // find for this extension
-              final JarClassLoader cl = new JarClassLoader(packageFragmentRoot.getPath().toPortableString());
-
-              // Inspect the jar by scanning its classpath and looking for
-              // classes that implement
-              // CustomServiceTask
-              final IJavaElement[] javaElements = packageFragmentRoot.getChildren();
-              for (final IJavaElement javaElement : javaElements) {
-                if (javaElement.getElementType() == IJavaElement.PACKAGE_FRAGMENT) {
-                  IPackageFragment fragment = (IPackageFragment) javaElement;
-                  if (fragment.containsJavaResources()) {
-                    final IClassFile[] classFiles = fragment.getClassFiles();
-                    for (final IClassFile classFile : classFiles) {
+                  // Inspect the jar by scanning its classpath and looking for classes that implement CustomServiceTask
+                  for (final IJavaElement javaElement : iPackageFragment.getChildren()) {
+                    if (javaElement.getElementType() == IJavaElement.CLASS_FILE) {
+                      IClassFile classFile = (IClassFile) javaElement;
                       if (classFile.isClass()) {
-
                         final IType type = classFile.getType();
                         if (!isConcretePaletteCustomizer(type)) {
                           continue;
@@ -136,11 +167,7 @@ public final class ExtensionUtil {
                               DefaultPaletteCustomizer DefaultPaletteCustomizer = (DefaultPaletteCustomizer) clazz.newInstance();
                               // Add this DefaultPaletteCustomizer to the result
                               result.addAll(DefaultPaletteCustomizer.disablePaletteEntries());
-                            } catch (InstantiationException e) {
-                              // TODO Auto-generated catch block
-                              e.printStackTrace();
-                            } catch (IllegalAccessException e) {
-                              // TODO Auto-generated catch block
+                            } catch (Exception e) {
                               e.printStackTrace();
                             }
                           }
@@ -182,7 +209,24 @@ public final class ExtensionUtil {
     }
 
     return customserviceFound;
+  }
+  
+  private static boolean isConcreteCustomUserTask(IType type) {
 
+    boolean customUserTaskFound = containsAbstractClassOrInterface(type, AbstractCustomUserTask.class, CustomUserTask.class);
+
+    try {
+      if (customUserTaskFound && !Modifier.isAbstract(type.getFlags())) {
+        customUserTaskFound = true;
+      } else {
+        customUserTaskFound = false;
+      }
+    } catch (JavaModelException e) {
+      customUserTaskFound = false;
+      e.printStackTrace();
+    }
+
+    return customUserTaskFound;
   }
 
   private static boolean isConcretePaletteCustomizer(IType type) {
@@ -252,6 +296,10 @@ public final class ExtensionUtil {
   public static final String wrapCustomPropertyId(final ServiceTask serviceTask, final String propertyId) {
     return serviceTask.getId() + ExtensionConstants.CUSTOM_PROPERTY_ID_SEPARATOR + propertyId;
   }
+  
+  public static final String wrapCustomPropertyId(final UserTask userTask, final String propertyId) {
+    return userTask.getId() + ExtensionConstants.CUSTOM_PROPERTY_ID_SEPARATOR + propertyId;
+  }
 
   /**
    * Unwraps the provided property id string.
@@ -280,6 +328,25 @@ public final class ExtensionUtil {
     }
     return result;
   }
+  
+  public static final boolean isCustomUserTask(final Object bo) {
+    boolean result = false;
+    if (bo instanceof UserTask) {
+      final UserTask userTask = (UserTask) bo;
+      return StringUtils.isNotEmpty(userTask.getExtensionId());
+    }
+    return result;
+  }
+  
+  public static final CustomProperty getCustomProperty(final Task task, final String propertyName) {
+    if (task instanceof ServiceTask) {
+      return getCustomProperty((ServiceTask) task, propertyName);
+    } else if (task instanceof UserTask) {
+      return getCustomProperty((UserTask) task, propertyName);
+    } else {
+      return null;
+    }
+  }
 
   /**
    * Gets the {@link CustomProperty} identified by the provided name from the
@@ -294,6 +361,17 @@ public final class ExtensionUtil {
   public static final CustomProperty getCustomProperty(final ServiceTask serviceTask, final String propertyName) {
     CustomProperty result = null;
     for (final CustomProperty customProperty : serviceTask.getCustomProperties()) {
+      if (propertyName.equals(customProperty.getName())) {
+        result = customProperty;
+        break;
+      }
+    }
+    return result;
+  }
+  
+  public static final CustomProperty getCustomProperty(final UserTask userTask, final String propertyName) {
+    CustomProperty result = null;
+    for (final CustomProperty customProperty : userTask.getCustomProperties()) {
       if (propertyName.equals(customProperty.getName())) {
         result = customProperty;
         break;
@@ -385,6 +463,41 @@ public final class ExtensionUtil {
 
     return result;
   }
+  
+  /**
+   * Gets a list of {@link CustomUserTask} objects based on the
+   * {@link IProject} provided.
+   * 
+   * @param project
+   *          the project that has {@link CustomUserTask}s defined
+   * @return a list of all {@link CustomUserTask}s or an empty list if none
+   *         were found
+   */
+  public static List<CustomUserTask> getCustomUserTasks(final IProject project) {
+
+    List<CustomUserTask> result = new ArrayList<CustomUserTask>();
+
+    // Determine the project
+    IJavaProject javaProject = null;
+    try {
+      javaProject = (IJavaProject) project.getNature(JavaCore.NATURE_ID);
+    } catch (CoreException e) {
+      // skip, not a Java project
+    }
+
+    if (javaProject != null) {
+
+      // get the contexts first
+      final List<CustomUserTaskContext> cstContexts = getCustomUserTaskContexts(project);
+
+      // extract custom service tasks from the contexts
+      for (final CustomUserTaskContext customUserTaskContext : cstContexts) {
+        result.add(customUserTaskContext.getUserTask());
+      }
+    }
+
+    return result;
+  }
 
   /**
    * Gets a list of {@link CustomServiceTaskContext} objects based on the
@@ -416,7 +529,7 @@ public final class ExtensionUtil {
         // Get the container for the designer extensions. This is the
         // predefined user library linking to the extension libraries
         final IClasspathContainer userLibraryContainer = JavaCore.getClasspathContainer(new Path(DESIGNER_EXTENSIONS_USER_LIB_PATH), javaProject);
-
+        
         // Get a list of the classpath entries in the container. Each of
         // these represents one jar containing zero or more designer
         // extensions
@@ -430,50 +543,57 @@ public final class ExtensionUtil {
 
             // Only check entries of the correct kind
             if (classpathEntry.getEntryKind() == IClasspathEntry.CPE_LIBRARY && classpathEntry.getContentKind() == IPackageFragmentRoot.K_BINARY) {
-
-              final IPackageFragmentRoot packageFragmentRoot = javaProject.getPackageFragmentRoot(classpathEntry.getPath().toString());
-
-              // Guard against JARs that are not open,
-              // http://jira.codehaus.org/browse/ACT-1445
-              if (!packageFragmentRoot.isOpen()) {
-                final String exceptionMessage = String
-                        .format("There was an error when processing an extension to Activiti Designer. The extension at location '%s' is not open. Please make sure it is not installed inside the Eclipse workspace.",
-                                classpathEntry.getPath().toString());
-                showExtensionExceptionMessageIfNotFlagged(exceptionMessage, packageFragmentRoot);
-                continue;
-              }
-
-              // Determine the name of the extension
-              String extensionName = null;
-              // Extract the manifest and look for the
-              // CustomServiceTask.MANIFEST_EXTENSION_NAME
-              // property
-              final Manifest manifest = extractManifest(packageFragmentRoot);
-              if (manifest != null) {
-                extensionName = manifest.getMainAttributes().getValue(CustomServiceTask.MANIFEST_EXTENSION_NAME);
-              }
-              // If there is no manifest or the property wasn't
-              // defined, use the jar's name as extension name
-              // instead
-              if (extensionName == null) {
-                extensionName = classpathEntry.getPath().lastSegment();
-              }
-
-              // Create a JarClassLoader to load any classes we
-              // find for this extension
-
-              final JarClassLoader cl = new JarClassLoader(packageFragmentRoot.getPath().toPortableString());
-
-              // Inspect the jar by scanning its classpath and
-              // looking for classes that implement
-              // CustomServiceTask
-              final IJavaElement[] javaElements = packageFragmentRoot.getChildren();
-              for (final IJavaElement javaElement : javaElements) {
-                if (javaElement.getElementType() == IJavaElement.PACKAGE_FRAGMENT) {
-                  IPackageFragment fragment = (IPackageFragment) javaElement;
-                  if (fragment.containsJavaResources()) {
-                    final IClassFile[] classFiles = fragment.getClassFiles();
-                    for (final IClassFile classFile : classFiles) {
+              IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+              IPackageFragment[] fragments = javaProject.getPackageFragments();
+              for (IPackageFragment iPackageFragment : fragments) {
+                
+                if (classpathEntry.getPath().lastSegment().equalsIgnoreCase(iPackageFragment.getParent().getElementName())) {
+                  
+                  Manifest manifest = null;
+                  for (Object obj : iPackageFragment.getNonJavaResources()) {
+                    if (obj instanceof JarEntryDirectory) {
+                      final JarEntryDirectory jarEntryDirectory = (JarEntryDirectory) obj;
+                      final IJarEntryResource[] jarEntryResources = jarEntryDirectory.getChildren();
+                      for (IJarEntryResource jarEntryResource : jarEntryResources) {
+                        if ("MANIFEST.MF".equals(jarEntryResource.getName())) {
+                          try {
+                            final InputStream stream = jarEntryResource.getContents();
+                            manifest = new Manifest(stream);
+                            
+                          } catch (Exception e) {
+                            // no manifest as result
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  final IJavaElement[] javaElements = iPackageFragment.getChildren();
+                  
+                  String classPathFilename = null;
+                  if (classpathEntry.getPath().toFile().exists()) {
+                    classPathFilename = classpathEntry.getPath().toPortableString();
+                  } else {
+                    classPathFilename = root.getLocation().toPortableString() + classpathEntry.getPath().toPortableString();
+                  }
+                  
+                  JarClassLoader cl = new JarClassLoader(classPathFilename);
+                  
+                  // Determine the name of the extension
+                  String extensionName = null;
+                  if (manifest != null) {
+                    extensionName = manifest.getMainAttributes().getValue(CustomServiceTask.MANIFEST_EXTENSION_NAME);
+                  }
+                  // If there is no manifest or the property wasn't
+                  // defined, use the jar's name as extension name
+                  // instead
+                  if (extensionName == null) {
+                    extensionName = classpathEntry.getPath().lastSegment();
+                  }
+                  
+                  for (final IJavaElement javaElement : javaElements) {
+                    if (javaElement.getElementType() == IJavaElement.CLASS_FILE) {
+                      IClassFile classFile = (IClassFile) javaElement;
                       if (classFile.isClass()) {
 
                         final IType type = classFile.getType();
@@ -481,43 +601,158 @@ public final class ExtensionUtil {
                         if (!isConcreteCustomService(type)) {
                           continue;
                         }
-                        // if (type.getFullyQualifiedName() !=
-                        // "com.atosorigin.esuite.editors.servicetasks.ESuiteEndNode")
-                        // {
-                        // continue;
-                        // }
+                        
                         try {
                           Class<CustomServiceTask> clazz = (Class<CustomServiceTask>) cl.loadClass(type.getFullyQualifiedName());
 
-                          // Filter if the class is
-                          // abstract: this probably
-                          // means it is extended by
-                          // concrete classes in the
-                          // extension and will have
-                          // any properties applied in
-                          // that way; we can't
-                          // instantiate the class
-                          // anyway
+                          // Filter if the class is abstract: this probably means it is extended by concrete classes in the
+                          // extension and will have any properties applied in that way; we can't instantiate the class anyway
                           if (!Modifier.isAbstract(clazz.getModifiers()) && CustomServiceTask.class.isAssignableFrom(clazz)) {
                             try {
                               CustomServiceTask customServiceTask = (CustomServiceTask) clazz.newInstance();
-                              // Add this
-                              // CustomServiceTask
-                              // to
-                              // the result,
-                              // wrapped
-                              // in its context
-                              result.add(new CustomServiceTaskContextImpl(customServiceTask, extensionName, classpathEntry.getPath().toPortableString()));
-
-                            } catch (InstantiationException e) {
-                              // TODO
-                              // Auto-generated
-                              // catch block
+                              // Add this CustomServiceTask to the result, wrapped in its context
+                              result.add(new CustomServiceTaskContextImpl(customServiceTask, extensionName, classPathFilename));
+                              
+                            } catch (Exception e) {
                               e.printStackTrace();
-                            } catch (IllegalAccessException e) {
-                              // TODO
-                              // Auto-generated
-                              // catch block
+                            }
+
+                          }
+                        } catch (ClassNotFoundException e) {
+                          e.printStackTrace();
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (JavaModelException e) {
+        showExtensionExceptionMessage(String.format("There was a technical error when processing an extension to Activiti Designer: %s", e.getMessage()));
+        e.printStackTrace();
+      }
+    }
+
+    return result;
+  }
+  
+  /**
+   * Gets a list of {@link CustomUserTaskContext} objects based on the
+   * {@link IProject} provided.
+   * 
+   * @param project
+   *          the project that has {@link CustomUserTask}s defined
+   * @return a list containing the context of each {@link CustomUserTask}
+   *         object found or an empty list if {@link CustomUserTask}s were
+   *         found were found
+   */
+  public static List<CustomUserTaskContext> getCustomUserTaskContexts(final IProject project) {
+
+    List<CustomUserTaskContext> result = new ArrayList<CustomUserTaskContext>();
+
+    addToCustomUserTasks(result);
+
+    IJavaProject javaProject = null;
+    try {
+      javaProject = (IJavaProject) project.getNature(JavaCore.NATURE_ID);
+    } catch (CoreException e) {
+      // skip, not a Java project
+    }
+
+    if (javaProject != null) {
+
+      try {
+
+        // Get the container for the designer extensions. This is the
+        // predefined user library linking to the extension libraries
+        final IClasspathContainer userLibraryContainer = JavaCore.getClasspathContainer(new Path(DESIGNER_EXTENSIONS_USER_LIB_PATH), javaProject);
+        
+        // Get a list of the classpath entries in the container. Each of
+        // these represents one jar containing zero or more designer
+        // extensions
+        final IClasspathEntry[] extensionJars = userLibraryContainer.getClasspathEntries();
+
+        // If there are jars, inspect them; otherwise return because
+        // there are no extensions
+        if (extensionJars.length > 0) {
+
+          for (final IClasspathEntry classpathEntry : extensionJars) {
+
+            // Only check entries of the correct kind
+            if (classpathEntry.getEntryKind() == IClasspathEntry.CPE_LIBRARY && classpathEntry.getContentKind() == IPackageFragmentRoot.K_BINARY) {
+              IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+              IPackageFragment[] fragments = javaProject.getPackageFragments();
+              for (IPackageFragment iPackageFragment : fragments) {
+                
+                if (classpathEntry.getPath().lastSegment().equalsIgnoreCase(iPackageFragment.getParent().getElementName())) {
+                  
+                  Manifest manifest = null;
+                  for (Object obj : iPackageFragment.getNonJavaResources()) {
+                    if (obj instanceof JarEntryDirectory) {
+                      final JarEntryDirectory jarEntryDirectory = (JarEntryDirectory) obj;
+                      final IJarEntryResource[] jarEntryResources = jarEntryDirectory.getChildren();
+                      for (IJarEntryResource jarEntryResource : jarEntryResources) {
+                        if ("MANIFEST.MF".equals(jarEntryResource.getName())) {
+                          try {
+                            final InputStream stream = jarEntryResource.getContents();
+                            manifest = new Manifest(stream);
+                            
+                          } catch (Exception e) {
+                            // no manifest as result
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  final IJavaElement[] javaElements = iPackageFragment.getChildren();
+                  
+                  String classPathFilename = null;
+                  if (classpathEntry.getPath().toFile().exists()) {
+                    classPathFilename = classpathEntry.getPath().toPortableString();
+                  } else {
+                    classPathFilename = root.getLocation().toPortableString() + classpathEntry.getPath().toPortableString();
+                  }
+                  
+                  JarClassLoader cl = new JarClassLoader(classPathFilename);
+                  
+                  // Determine the name of the extension
+                  String extensionName = null;
+                  if (manifest != null) {
+                    extensionName = manifest.getMainAttributes().getValue(CustomServiceTask.MANIFEST_EXTENSION_NAME);
+                  }
+                  // If there is no manifest or the property wasn't
+                  // defined, use the jar's name as extension name
+                  // instead
+                  if (extensionName == null) {
+                    extensionName = classpathEntry.getPath().lastSegment();
+                  }
+                  
+                  for (final IJavaElement javaElement : javaElements) {
+                    if (javaElement.getElementType() == IJavaElement.CLASS_FILE) {
+                      IClassFile classFile = (IClassFile) javaElement;
+                      if (classFile.isClass()) {
+
+                        final IType type = classFile.getType();
+
+                        if (!isConcreteCustomUserTask(type)) {
+                          continue;
+                        }
+                        
+                        try {
+                          Class<CustomUserTask> clazz = (Class<CustomUserTask>) cl.loadClass(type.getFullyQualifiedName());
+
+                          // Filter if the class is abstract: this probably means it is extended by concrete classes in the
+                          // extension and will have any properties applied in that way; we can't instantiate the class anyway
+                          if (!Modifier.isAbstract(clazz.getModifiers()) && CustomUserTask.class.isAssignableFrom(clazz)) {
+                            try {
+                              CustomUserTask customUserTask = (CustomUserTask) clazz.newInstance();
+                              // Add this CustomServiceTask to the result, wrapped in its context
+                              result.add(new CustomUserTaskContextImpl(customUserTask, extensionName, classPathFilename));
+                              
+                            } catch (Exception e) {
                               e.printStackTrace();
                             }
 
@@ -542,13 +777,6 @@ public final class ExtensionUtil {
     return result;
   }
 
-  private static void showExtensionExceptionMessageIfNotFlagged(final String detailMessage, final IPackageFragmentRoot packageFragmentRoot) {
-    final String flagKey = packageFragmentRoot.getPath().toPortableString();
-    if (!FLAGS.contains(flagKey)) {
-      FLAGS.add(flagKey);
-      showExtensionExceptionMessage(detailMessage);
-    }
-  }
   private static void showExtensionExceptionMessage(final String detailMessage) {
     MessageDialog.openError(PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(), "Error in extension", detailMessage);
   }
@@ -568,35 +796,20 @@ public final class ExtensionUtil {
       }
     }
   }
-
-  /**
-   * @param packageFragmentRoot
-   * @throws JavaModelException
-   * @throws CoreException
-   */
-  @SuppressWarnings("restriction")
-  private static Manifest extractManifest(IPackageFragmentRoot packageFragmentRoot) throws JavaModelException {
-
-    Manifest result = null;
-    final Object[] nonJavaResources = packageFragmentRoot.getNonJavaResources();
-
-    for (Object obj : nonJavaResources) {
-      if (obj instanceof JarEntryDirectory) {
-        final JarEntryDirectory jarEntryDirectory = (JarEntryDirectory) obj;
-        final IJarEntryResource[] jarEntryResources = jarEntryDirectory.getChildren();
-        for (IJarEntryResource jarEntryResource : jarEntryResources) {
-          if ("MANIFEST.MF".equals(jarEntryResource.getName())) {
-            try {
-              final InputStream stream = jarEntryResource.getContents();
-              result = new Manifest(stream);
-            } catch (Exception e) {
-              // no manifest as result
-            }
+  
+  private static void addToCustomUserTasks(List<CustomUserTaskContext> result) {
+    if (providedCustomUserTaskDescriptors != null) {
+      for (CustomUserTaskDescriptor dscr : providedCustomUserTaskDescriptors) {
+        Class< ? extends CustomUserTask> clazz = dscr.getClazz();
+        if (clazz != null && !Modifier.isAbstract(clazz.getModifiers()) && CustomUserTask.class.isAssignableFrom(clazz)) {
+          try {
+            CustomUserTask customUserTask = (CustomUserTask) clazz.newInstance();
+            result.add(new CustomUserTaskContextImpl(customUserTask, dscr.getExtensionName(), dscr.getExtensionJarPath()));
+          } catch (Exception e) {
+            e.printStackTrace();
           }
         }
       }
     }
-    return result;
   }
-
 }
